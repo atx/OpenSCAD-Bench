@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenSCAD Bench Results</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .run-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 8px;
+        }
+        .run-video {
+            width: 100px;
+            height: 75px;
+            object-fit: cover;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: transform 0.15s ease;
+        }
+        .run-video:hover {
+            transform: scale(1.05);
+        }
+        .modal {
+            display: none;
+        }
+        .modal.active {
+            display: flex;
+        }
+        #stl-viewer {
+            width: 100%;
+            height: 400px;
+            border-radius: 8px;
+        }
+        .code-viewer {
+            max-height: 300px;
+            overflow: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen p-6">
+    <header class="mb-8">
+        <h1 class="text-3xl font-bold">OpenSCAD Bench Results</h1>
+        <p class="text-gray-400 mt-2">LLM benchmark for 3D modeling via OpenSCAD code generation</p>
+    </header>
+
+    <div class="overflow-x-auto">
+        <table class="min-w-full border-collapse">
+            <thead>
+                <tr>
+                    <th class="border border-gray-700 p-3 bg-gray-800 text-left">Agent</th>
+                    {% for benchmark in benchmarks %}
+                    <th class="border border-gray-700 p-3 bg-gray-800 text-center">
+                        <div class="font-semibold">{{ benchmark.name }}</div>
+                        <div class="text-xs text-gray-500 font-mono">{{ benchmark.id }}</div>
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for agent in agents %}
+                <tr>
+                    <td class="border border-gray-700 p-3 bg-gray-800 font-mono text-sm align-top">
+                        {{ agent }}
+                    </td>
+                    {% for benchmark in benchmarks %}
+                    <td class="border border-gray-700 p-3 align-top">
+                        {% set runs = cells.get((agent, benchmark.id), []) %}
+                        {% if runs %}
+                        <div class="run-grid">
+                            {% for run in runs %}
+                            <div class="relative group">
+                                <video
+                                    class="run-video"
+                                    src="assets/{{ benchmark.id }}/{{ agent }}/{{ run.run_id }}/turntable.webm"
+                                    muted
+                                    loop
+                                    playsinline
+                                    onmouseover="this.play()"
+                                    onmouseout="this.pause(); this.currentTime=0;"
+                                    onclick="openModal('{{ benchmark.id }}', '{{ agent }}', '{{ run.run_id }}')"
+                                ></video>
+                                <div class="absolute bottom-1 right-1 bg-black bg-opacity-70 text-xs px-1 rounded">
+                                    #{{ run.run_id }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="text-gray-600 text-sm italic">No results</div>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Modal -->
+    <div id="detail-modal" class="modal fixed inset-0 bg-black bg-opacity-80 items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 rounded-lg max-w-5xl w-full max-h-[95vh] overflow-hidden flex flex-col">
+            <!-- Header -->
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center shrink-0">
+                <h2 id="modal-title" class="text-xl font-bold"></h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+
+            <!-- Content -->
+            <div class="p-4 overflow-y-auto flex-1">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Left column: STL viewer -->
+                    <div>
+                        <h3 class="font-semibold mb-2 text-gray-300">Interactive 3D View</h3>
+                        <div id="stl-viewer" class="bg-gray-900"></div>
+                        <p class="text-xs text-gray-500 mt-1">Click and drag to rotate. Scroll to zoom.</p>
+                    </div>
+
+                    <!-- Right column: Code -->
+                    <div>
+                        <h3 class="font-semibold mb-2 text-gray-300">Solution Code</h3>
+                        <pre id="modal-code" class="bg-gray-900 rounded-lg p-4 font-mono text-sm code-viewer whitespace-pre-wrap"></pre>
+
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <a id="modal-trace-link" href="#" target="_blank"
+                               class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition">
+                                View Trace
+                            </a>
+                            <a id="modal-scad-link" href="#" target="_blank"
+                               class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition">
+                                View SCAD
+                            </a>
+                            <a id="modal-stl-link" href="#" download
+                               class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium transition">
+                                Download STL
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js scripts (loaded only when modal opens) -->
+    <script>
+        let threeLoaded = false;
+        let scene, camera, renderer, controls, currentMesh, currentEdges;
+
+        function loadThreeJS() {
+            if (threeLoaded) return Promise.resolve();
+
+            return new Promise((resolve) => {
+                const script1 = document.createElement('script');
+                script1.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+                script1.onload = () => {
+                    const script2 = document.createElement('script');
+                    script2.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js';
+                    script2.onload = () => {
+                        const script3 = document.createElement('script');
+                        script3.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+                        script3.onload = () => {
+                            threeLoaded = true;
+                            resolve();
+                        };
+                        document.head.appendChild(script3);
+                    };
+                    document.head.appendChild(script2);
+                };
+                document.head.appendChild(script1);
+            });
+        }
+
+        function initThreeJS() {
+            const container = document.getElementById('stl-viewer');
+            if (!container || !window.THREE) return;
+
+            // Clear previous
+            container.innerHTML = '';
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+
+            camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 5000);
+            camera.position.set(150, 150, 150);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            // Lights - hemisphere for soft ambient, directional for shading
+            const hemiLight = new THREE.HemisphereLight(0x606060, 0x404040, 1);
+            scene.add(hemiLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1).normalize();
+            scene.add(directionalLight);
+
+            animate();
+        }
+
+        function animate() {
+            if (!renderer) return;
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function loadSTL(url) {
+            if (!window.THREE) return;
+
+            if (currentMesh) {
+                scene.remove(currentMesh);
+                currentMesh = null;
+            }
+            if (currentEdges) {
+                scene.remove(currentEdges);
+                currentEdges = null;
+            }
+
+            const loader = new THREE.STLLoader();
+            loader.load(url, function(geometry) {
+                // Material with reduced specular and double-sided rendering
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0x00aaff,
+                    specular: 0x111111,
+                    shininess: 50,
+                    side: THREE.DoubleSide
+                });
+                currentMesh = new THREE.Mesh(geometry, material);
+
+                // Rotate from OpenSCAD Z-up to three.js Y-up
+                currentMesh.rotation.x = -Math.PI / 2;
+
+                // Center the model (after rotation)
+                geometry.computeBoundingBox();
+                const box = geometry.boundingBox;
+                // Account for rotation: Z becomes Y, Y becomes -Z
+                const centerX = (box.min.x + box.max.x) / 2;
+                const centerY = (box.min.z + box.max.z) / 2;  // was Z
+                const centerZ = -(box.min.y + box.max.y) / 2; // was -Y
+                currentMesh.position.set(-centerX, -centerY, -centerZ);
+
+                scene.add(currentMesh);
+
+                // Add edge lines for visibility (like OpenSCAD)
+                const edges = new THREE.EdgesGeometry(geometry, 30);
+                currentEdges = new THREE.LineSegments(edges,
+                    new THREE.LineBasicMaterial({ color: 0x88ccff }));
+                currentEdges.rotation.x = currentMesh.rotation.x;
+                currentEdges.position.copy(currentMesh.position);
+                scene.add(currentEdges);
+
+                // Adjust camera based on model size
+                // Match turntable camera: elevation=25°, azimuth=0°
+                const sizeX = box.max.x - box.min.x;
+                const sizeY = box.max.z - box.min.z;  // Z becomes Y after rotation
+                const sizeZ = box.max.y - box.min.y;  // Y becomes Z after rotation
+                const maxDim = Math.max(sizeX, sizeY, sizeZ);
+                const dist = maxDim * 2;
+
+                // Spherical coords: elevation=25°, azimuth=0° (front view)
+                const elevation = 25 * Math.PI / 180;
+                const azimuth = 0 * Math.PI / 180;
+                camera.position.set(
+                    dist * Math.cos(elevation) * Math.sin(azimuth),
+                    dist * Math.sin(elevation),
+                    dist * Math.cos(elevation) * Math.cos(azimuth)
+                );
+                camera.near = maxDim / 100;
+                camera.far = maxDim * 100;
+                camera.updateProjectionMatrix();
+                controls.update();
+            });
+        }
+
+        async function openModal(benchmarkId, agentId, runId) {
+            const basePath = `assets/${benchmarkId}/${agentId}/${runId}`;
+
+            document.getElementById('modal-title').textContent =
+                `${benchmarkId} / ${agentId} / Run ${runId}`;
+            document.getElementById('modal-trace-link').href = `${basePath}/trace.json`;
+            document.getElementById('modal-scad-link').href = `${basePath}/solution.scad`;
+            document.getElementById('modal-stl-link').href = `${basePath}/solution.stl`;
+
+            // Load code
+            const codeResp = await fetch(`${basePath}/solution.scad`);
+            const code = await codeResp.text();
+            document.getElementById('modal-code').textContent = code;
+
+            document.getElementById('detail-modal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+
+            // Load three.js and STL
+            await loadThreeJS();
+            initThreeJS();
+            loadSTL(`${basePath}/solution.stl`);
+        }
+
+        function closeModal() {
+            document.getElementById('detail-modal').classList.remove('active');
+            document.body.style.overflow = '';
+
+            // Clean up three.js
+            if (renderer) {
+                renderer.dispose();
+                renderer = null;
+            }
+            if (currentMesh) {
+                currentMesh.geometry.dispose();
+                currentMesh.material.dispose();
+                currentMesh = null;
+            }
+            if (currentEdges) {
+                currentEdges.geometry.dispose();
+                currentEdges.material.dispose();
+                currentEdges = null;
+            }
+            scene = null;
+            camera = null;
+            controls = null;
+        }
+
+        // Close modal on backdrop click
+        document.getElementById('detail-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeModal();
+        });
+    </script>
+</body>
+</html>
