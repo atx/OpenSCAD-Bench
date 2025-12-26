@@ -28,6 +28,23 @@ class Result:
     started_at: datetime
     completed_at: datetime
 
+    @staticmethod
+    def make_path_for_base_dir(
+        base_path: Path, benchmark_id: str, agent_id: str, run_id: str
+    ) -> Path:
+        """Construct the result directory path from components.
+
+        Args:
+            base_path: Base results directory.
+            benchmark_id: ID of the benchmark.
+            agent_id: ID of the agent/model.
+            run_id: Run identifier.
+
+        Returns:
+            Path to results/{benchmark_id}/{agent_id}/{run_id}/
+        """
+        return base_path / benchmark_id / agent_id / run_id
+
     def get_result_dir(self, base_path: Path) -> Path:
         """Get the directory path for this result.
 
@@ -37,7 +54,9 @@ class Result:
         Returns:
             Path to results/{benchmark_id}/{agent_id}/{run_id}/
         """
-        return base_path / self.benchmark_id / self.agent_id / self.run_id
+        return self.make_path_for_base_dir(
+            base_path, self.benchmark_id, self.agent_id, self.run_id
+        )
 
     def save(self, base_path: Path) -> Path:
         """Save all artifacts to disk.

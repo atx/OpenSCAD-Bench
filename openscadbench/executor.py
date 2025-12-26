@@ -1,5 +1,6 @@
 """Executor implementations for running benchmarks."""
 
+import json
 import tempfile
 from datetime import datetime
 from fnmatch import fnmatch
@@ -8,10 +9,112 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 import llm
+import llm_openrouter
 
 from openscadbench import openscad
 from openscadbench.benchmark import Benchmark
 from openscadbench.result import Result
+
+
+_patches_installed = False
+
+
+def _install_patches():
+    """Install all necessary monkey-patches for the llm library."""
+    global _patches_installed
+    if _patches_installed:
+        return
+
+    # Patch 1: Fix json.loads(None) crash for tools with no arguments
+    # Some providers (Anthropic) return null for tool arguments when empty,
+    # but the llm library calls json.loads() which crashes on None.
+    import llm.default_plugins.openai_models as openai_models
+
+    _original_json = openai_models.json
+
+    class _SafeJson:
+        @staticmethod
+        def loads(s, **kwargs):
+            if s is None:
+                return {}
+            return _original_json.loads(s, **kwargs)
+
+        @staticmethod
+        def dumps(*args, **kwargs):
+            return _original_json.dumps(*args, **kwargs)
+
+    openai_models.json = _SafeJson
+
+    # Patch 2: Preserve reasoning_details for Gemini 3 models
+    _install_reasoning_patch()
+
+    _patches_installed = True
+
+
+def _install_reasoning_patch():
+    """Monkey-patch llm_openrouter to preserve reasoning_details.
+
+    Gemini 3 models require reasoning_details (thought signatures) to be
+    preserved across conversation turns when using tool calling. The llm
+    library doesn't do this by default, so we patch build_messages.
+
+    The llm library splits API responses into separate assistant messages for
+    content vs tool_calls, but reasoning_details must be attached to the
+    message with tool_calls. We match tool_call IDs to find the right message.
+    """
+    original_build_messages = llm_openrouter.OpenRouterChat.build_messages
+
+    def patched_build_messages(self, prompt, conversation):
+        messages = original_build_messages(self, prompt, conversation)
+
+        if not conversation:
+            return messages
+
+        # Build a map of tool_call_id -> reasoning_details from all responses
+        reasoning_by_tool_call = {}
+        for prev_response in conversation.responses:
+            if not hasattr(prev_response, "response_json"):
+                continue
+            response_json = prev_response.response_json
+            if not response_json:
+                continue
+            choices = response_json.get("choices", [])
+            if not choices:
+                continue
+            message = choices[0].get("message", {})
+            reasoning = message.get("reasoning_details")
+            tool_calls = message.get("tool_calls", [])
+
+            if not reasoning or not tool_calls:
+                continue
+            # Map each tool_call ID to this reasoning_details
+            for tc in tool_calls:
+                tc_id = tc.get("id")
+                if tc_id:
+                    reasoning_by_tool_call[tc_id] = reasoning
+
+        if not reasoning_by_tool_call:
+            return messages
+
+        # Find assistant messages with tool_calls and inject reasoning_details
+        for msg in messages:
+            if msg.get("role") != "assistant":
+                continue
+            tool_calls = msg.get("tool_calls", [])
+            if not tool_calls:
+                continue
+            # Get the first tool_call ID and look up its reasoning
+            first_tc_id = tool_calls[0].get("id")
+            if first_tc_id and first_tc_id in reasoning_by_tool_call:
+                msg["reasoning_details"] = reasoning_by_tool_call[first_tc_id]
+
+        return messages
+
+    llm_openrouter.OpenRouterChat.build_messages = patched_build_messages
+
+
+# Apply patches at module load time
+_install_patches()
 
 
 SYSTEM_PROMPT = """\
@@ -32,15 +135,12 @@ You have access to the following tools:
 - render_overview(): Render four standard views (front, back, top, isometric) as a
   single composite image. Use this to quickly check your model from all angles.
 
-- get_dimensions(): Get the bounding box dimensions of the current model. Returns
-  {x, y, z} in mm.
-
 - submit(): Call this when you are satisfied with your model.
 
 ## Guidelines
 
 1. Start by writing an initial version of the model, then render it to see the result.
-2. Iterate: refine the code, re-render, check dimensions, until satisfied.
+2. Iterate: refine the code, re-render, until satisfied.
 3. Use render_overview() periodically to verify the model looks correct from all angles.
 4. OpenSCAD uses millimeters as the default unit.
 5. When you believe the model meets the requirements, call submit().
@@ -170,7 +270,7 @@ class AgentExecutor:
                 attachments=[llm.Attachment(content=buf.getvalue(), type="image/png")],
             )
 
-        def render_overview() -> llm.ToolOutput:
+        def render_overview(_unused: str = "") -> llm.ToolOutput:
             """Render four standard views as a single composite image.
 
             Renders front, back, top, and isometric views in a 2x2 grid.
@@ -189,19 +289,7 @@ class AgentExecutor:
                 attachments=[llm.Attachment(content=buf.getvalue(), type="image/png")],
             )
 
-        def get_dimensions() -> str:
-            """Get the bounding box dimensions of the current model.
-
-            Returns:
-                JSON with x, y, z dimensions in mm.
-            """
-            try:
-                dims = openscad.get_dimensions(scad_path)
-            except openscad.OpenSCADError as e:
-                return f'{{"success": false, "error": "{e}"}}'
-            return f'{{"x": {dims["x"]}, "y": {dims["y"]}, "z": {dims["z"]}}}'
-
-        def submit() -> str:
+        def submit(_unused: str = "") -> str:
             """Signal that you are satisfied with the model.
 
             Call this when you believe the model meets the requirements.
@@ -212,7 +300,7 @@ class AgentExecutor:
             state["submitted"] = True
             return '{"success": true, "message": "Solution submitted"}'
 
-        return [write_scad, render_png, render_overview, get_dimensions, submit], state
+        return [write_scad, render_png, render_overview, submit], state
 
     def run(self, benchmark: Benchmark, run_id: str) -> Result:
         """Execute a benchmark using the LLM agent.
@@ -250,18 +338,34 @@ class AgentExecutor:
 
             # Run agent loop
             iteration = 0
-            prompt = benchmark.prompt
-            include_system = True  # Only include system prompt on first call
+            pending_tool_results = None
 
             while iteration < self.max_iterations and not state["submitted"]:
                 iteration += 1
 
                 # Get response from model
-                if include_system:
-                    response = conversation.prompt(prompt, system=SYSTEM_PROMPT, tools=tools)
-                    include_system = False
+                # NOTE: stream=False is required because the llm library's
+                # combine_chunks doesn't preserve reasoning_details, which
+                # breaks Gemini 3 models that require thought signatures.
+                if pending_tool_results:
+                    # Continue with tool results from previous iteration
+                    response = conversation.prompt(
+                        tool_results=pending_tool_results,
+                        tools=tools,
+                        stream=False,
+                    )
+                    pending_tool_results = None
+                elif iteration == 1:
+                    # First iteration: include system prompt and user message
+                    response = conversation.prompt(
+                        benchmark.prompt,
+                        system=SYSTEM_PROMPT,
+                        tools=tools,
+                        stream=False,
+                    )
                 else:
-                    response = conversation.prompt(prompt, tools=tools)
+                    # No tool results and not first iteration - shouldn't happen normally
+                    break
 
                 # Consume the response text
                 response_text = response.text()
@@ -273,12 +377,10 @@ class AgentExecutor:
                     # No tool calls, model is done talking
                     break
 
-                # Execute tool calls
-                tool_results = response.execute_tool_calls()
+                # Execute tool calls and record in trace
+                pending_tool_results = response.execute_tool_calls()
 
-                # Build the next prompt with tool results
-                tool_messages = []
-                for tool_call, result in zip(tool_calls, tool_results):
+                for tool_call, result in zip(tool_calls, pending_tool_results):
                     tool_name = tool_call.name
                     tool_args = tool_call.arguments
 
@@ -286,7 +388,7 @@ class AgentExecutor:
                     trace.append({
                         "role": "assistant",
                         "tool_calls": [{
-                            "id": f"call_{iteration}_{tool_name}",
+                            "id": result.tool_call_id,
                             "type": "function",
                             "function": {
                                 "name": tool_name,
@@ -296,21 +398,16 @@ class AgentExecutor:
                     })
 
                     # Record tool result in trace
-                    if isinstance(result, llm.ToolOutput):
-                        result_text = result.output
+                    if isinstance(result.output, llm.ToolOutput):
+                        result_text = result.output.output
                     else:
-                        result_text = str(result)
+                        result_text = str(result.output)
 
                     trace.append({
                         "role": "tool",
-                        "tool_call_id": f"call_{iteration}_{tool_name}",
+                        "tool_call_id": result.tool_call_id,
                         "content": result_text,
                     })
-
-                    tool_messages.append(f"Tool {tool_name} returned: {result_text}")
-
-                # Continue with tool results as the next prompt
-                prompt = "\n".join(tool_messages) if tool_messages else "Continue."
 
             # Get final SCAD content
             scad_content = ""
@@ -331,11 +428,11 @@ class AgentExecutor:
 
 
 EXECUTORS: list[BaseExecutor] = [
-    #AgentExecutor("openrouter/google/gemini-3-flash-preview"),
-    #AgentExecutor("openrouter/google/gemini-3-pro-preview"),
-    #AgentExecutor("openrouter/anthropic/claude-sonnet-4.5"),
-    #AgentExecutor("openrouter/anthropic/claude-opus-4.5"),
-    #AgentExecutor("openrouter/openai/gpt-5.1-codex-max"),
+    AgentExecutor("openrouter/google/gemini-3-flash-preview"),
+    AgentExecutor("openrouter/google/gemini-3-pro-preview"),
+    AgentExecutor("openrouter/anthropic/claude-sonnet-4.5"),
+    AgentExecutor("openrouter/anthropic/claude-opus-4.5"),
+    AgentExecutor("openrouter/openai/gpt-5.1-codex-max"),
     AgentExecutor("openrouter/openai/gpt-5.1-codex-mini"),
 ]
 

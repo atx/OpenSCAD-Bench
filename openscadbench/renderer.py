@@ -156,6 +156,7 @@ class SiteRenderer:
             benchmarks.append({
                 "id": bid,
                 "name": b.name if b else bid,
+                "prompt": b.prompt.strip() if b else "",
             })
 
         # Build cells: (agent_id, benchmark_id) -> list of RunInfo

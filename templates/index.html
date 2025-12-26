@@ -117,8 +117,11 @@
                         <p class="text-xs text-gray-500 mt-1">Click and drag to rotate. Scroll to zoom.</p>
                     </div>
 
-                    <!-- Right column: Code -->
+                    <!-- Right column: Prompt + Code -->
                     <div>
+                        <h3 class="font-semibold mb-2 text-gray-300">Task Prompt</h3>
+                        <div id="modal-prompt" class="bg-gray-900 rounded-lg p-4 text-sm mb-4 whitespace-pre-wrap"></div>
+
                         <h3 class="font-semibold mb-2 text-gray-300">Solution Code</h3>
                         <pre id="modal-code" class="bg-gray-900 rounded-lg p-4 font-mono text-sm code-viewer whitespace-pre-wrap"></pre>
 
@@ -144,6 +147,12 @@
 
     <!-- Three.js scripts (loaded only when modal opens) -->
     <script>
+        const PROMPTS = {
+            {% for benchmark in benchmarks %}
+            "{{ benchmark.id }}": {{ benchmark.prompt | tojson }},
+            {% endfor %}
+        };
+
         let threeLoaded = false;
         let scene, camera, renderer, controls, currentMesh, currentEdges;
 
@@ -287,6 +296,7 @@
             document.getElementById('modal-trace-link').href = `${basePath}/trace.json`;
             document.getElementById('modal-scad-link').href = `${basePath}/solution.scad`;
             document.getElementById('modal-stl-link').href = `${basePath}/solution.stl`;
+            document.getElementById('modal-prompt').textContent = PROMPTS[benchmarkId] || '';
 
             // Load code
             const codeResp = await fetch(`${basePath}/solution.scad`);

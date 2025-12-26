@@ -14,6 +14,7 @@ from rich.syntax import Syntax
 from openscadbench import openscad
 from openscadbench.catalog import BENCHMARKS, match_benchmarks
 from openscadbench.executor import EXECUTORS, match_executors
+from openscadbench.result import Result
 
 # Load environment variables from .env file
 load_dotenv()
@@ -53,14 +54,25 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     # Run all combinations
     combinations = list(itertools.product(benchmarks, executors, runs))
+    completed = 0
+    skipped = 0
 
     for i, (benchmark, executor, run_id) in enumerate(combinations, 1):
+        result_dir = Result.make_path_for_base_dir(
+            results_dir, benchmark.id, executor.id, run_id
+        )
+        if result_dir.exists() and not args.force_overwrite:
+            print(f"Skipping {benchmark.id} with {executor.id} (run {run_id}): already exists")
+            skipped += 1
+            continue
+
         print(f"Running {benchmark.id} with {executor.id} (run {run_id})...")
         result = executor.run(benchmark, run_id)
         result_path = result.save(results_dir)
         print(f"  Saved to {result_path}")
+        completed += 1
 
-    print(f"\nCompleted {len(combinations)} runs.")
+    print(f"\nCompleted {completed} runs, skipped {skipped} existing.")
     return 0
 
 
@@ -171,8 +183,13 @@ def main() -> int:
     )
     run_parser.add_argument(
         "--runs",
-        default="1,2,3",
-        help='Comma-separated run IDs (default: "1,2,3")',
+        default="1",
+        help='Comma-separated run IDs (default: "1")',
+    )
+    run_parser.add_argument(
+        "--force-overwrite",
+        action="store_true",
+        help="Overwrite existing results (default: skip existing)",
     )
 
     # render-site command
