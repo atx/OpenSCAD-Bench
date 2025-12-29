@@ -37,6 +37,9 @@
             max-height: 300px;
             overflow: auto;
         }
+        .invalid-result {
+            opacity: 0.7;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen p-6">
@@ -71,6 +74,7 @@
                         <div class="run-grid">
                             {% for run in runs %}
                             <div class="relative group w-fit">
+                                {% if run.valid %}
                                 <video
                                     class="run-video"
                                     src="assets/{{ benchmark.id }}/{{ agent }}/{{ run.run_id }}/turntable.webm"
@@ -79,10 +83,17 @@
                                     playsinline
                                     onmouseover="this.play()"
                                     onmouseout="this.pause(); this.currentTime=0;"
-                                    onclick="openModal('{{ benchmark.id }}', '{{ agent }}', '{{ run.run_id }}')"
+                                    onclick="openModal('{{ benchmark.id }}', '{{ agent }}', '{{ run.run_id }}', true)"
                                 ></video>
+                                {% else %}
+                                <img
+                                    class="run-video invalid-result"
+                                    src="assets/{{ benchmark.id }}/{{ agent }}/{{ run.run_id }}/invalid.png"
+                                    onclick="openModal('{{ benchmark.id }}', '{{ agent }}', '{{ run.run_id }}', false)"
+                                >
+                                {% endif %}
                                 <div class="absolute bottom-1 right-1 bg-black bg-opacity-70 text-xs px-1 rounded">
-                                    #{{ run.run_id }}
+                                    #{{ run.run_id }}{% if not run.valid %} &#x26A0;{% endif %}
                                 </div>
                             </div>
                             {% endfor %}
@@ -111,10 +122,18 @@
             <div class="p-4 overflow-y-auto flex-1">
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <!-- Left column: STL viewer -->
-                    <div>
+                    <div id="stl-viewer-container">
                         <h3 class="font-semibold mb-2 text-gray-300">Interactive 3D View</h3>
                         <div id="stl-viewer" class="bg-gray-900"></div>
                         <p class="text-xs text-gray-500 mt-1">Click and drag to rotate. Scroll to zoom.</p>
+                    </div>
+                    <!-- Left column: Invalid result message (hidden by default) -->
+                    <div id="invalid-message-container" style="display: none;">
+                        <h3 class="font-semibold mb-2 text-gray-300">Result</h3>
+                        <div class="bg-gray-800 rounded-lg p-6 text-center h-96 flex flex-col justify-center">
+                            <p class="text-gray-400">This result failed to render.</p>
+                            <p class="text-gray-500 text-sm mt-2">The SCAD code contains errors or produces no geometry.</p>
+                        </div>
                     </div>
 
                     <!-- Right column: Prompt + Code -->
@@ -288,7 +307,7 @@
             });
         }
 
-        async function openModal(benchmarkId, agentId, runId) {
+        async function openModal(benchmarkId, agentId, runId, valid = true) {
             const basePath = `assets/${benchmarkId}/${agentId}/${runId}`;
 
             document.getElementById('modal-title').textContent =
@@ -306,10 +325,22 @@
             document.getElementById('detail-modal').classList.add('active');
             document.body.style.overflow = 'hidden';
 
-            // Load three.js and STL
-            await loadThreeJS();
-            initThreeJS();
-            loadSTL(`${basePath}/solution.stl`);
+            if (valid) {
+                // Show 3D viewer, hide invalid message
+                document.getElementById('stl-viewer-container').style.display = 'block';
+                document.getElementById('invalid-message-container').style.display = 'none';
+                document.getElementById('modal-stl-link').style.display = 'inline-block';
+
+                // Load three.js and STL
+                await loadThreeJS();
+                initThreeJS();
+                loadSTL(`${basePath}/solution.stl`);
+            } else {
+                // Hide 3D viewer, show invalid message
+                document.getElementById('stl-viewer-container').style.display = 'none';
+                document.getElementById('invalid-message-container').style.display = 'block';
+                document.getElementById('modal-stl-link').style.display = 'none';
+            }
         }
 
         function closeModal() {
