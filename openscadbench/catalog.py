@@ -53,6 +53,28 @@ while allowing easy removal by a finger hole from the bottom of each battery slo
         id="chess_rook",
         name="Chess Rook",
         prompt="""Create a 3D model of a chess rook piece."""
+    ),
+    Benchmark(
+        id="planetary_gearbox",
+        name="Planetary Gearbox",
+        prompt="""
+Design a print-in-place planetary gearbox that rotates freely immediately after
+printing with no post-processing.
+
+This gearbox should have a single stage with three planet gears orbiting a
+central sun gear, all enclosed within an outer ring gear.
+
+PRINTING CONSTRAINTS:
+- Material: PETG
+- Nozzle: 0.4mm
+- Layer height: 0.1mm
+- Print orientation: Gear axis vertical (Z-up)
+
+The mechanism must be designed so all moving parts (sun, planets, carrier)
+are captured but free to rotate after printing. Ensure bridge surfaces are
+supported or self-supporting (no overhangs exceeding 45°). Ensure that adequate
+clearances are provided between all moving parts to prevent fusion during printing.
+"""
     )
 ]
 
