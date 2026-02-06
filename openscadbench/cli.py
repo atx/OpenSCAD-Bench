@@ -3,6 +3,7 @@
 import argparse
 import itertools
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -191,6 +192,11 @@ def main() -> int:
         action="store_true",
         help="Overwrite existing results (default: skip existing)",
     )
+    run_parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose debug logging",
+    )
 
     # render-site command
     render_site_parser = subparsers.add_parser(
@@ -240,6 +246,10 @@ def main() -> int:
         case "list-benchmarks":
             return cmd_list_benchmarks(args)
         case "run":
+            logging.basicConfig(
+                level=logging.DEBUG if args.verbose else logging.WARNING,
+                format="%(message)s",
+            )
             return cmd_run(args)
         case "render-site":
             return cmd_render_site(args)

@@ -1,6 +1,7 @@
 """Executor implementations for running benchmarks."""
 
 import json
+import logging
 import tempfile
 from datetime import datetime
 from fnmatch import fnmatch
@@ -15,6 +16,8 @@ from openscadbench import openscad
 from openscadbench.benchmark import Benchmark
 from openscadbench.result import Result
 
+
+logger = logging.getLogger(__name__)
 
 _patches_installed = False
 
@@ -314,6 +317,7 @@ class AgentExecutor:
         """
         started_at = datetime.now()
         trace: list[dict] = []
+        logger.debug("Starting run: benchmark=%s model=%s run=%s", benchmark.id, self.model_name, run_id)
 
         # Create temporary working directory
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -342,6 +346,7 @@ class AgentExecutor:
 
             while iteration < self.max_iterations and not state["submitted"]:
                 iteration += 1
+                logger.debug("Iteration %d/%d", iteration, self.max_iterations)
 
                 # Get response from model
                 # NOTE: stream=False is required because the llm library's
@@ -370,11 +375,12 @@ class AgentExecutor:
                 # Consume the response text
                 response_text = response.text()
                 trace.append({"role": "assistant", "content": response_text})
+                logger.debug("  Response: %d chars", len(response_text or ""))
 
                 # Check for tool calls
                 tool_calls = response.tool_calls()
                 if not tool_calls:
-                    # No tool calls, model is done talking
+                    logger.debug("  No tool calls, model finished")
                     break
 
                 # Execute tool calls and record in trace
@@ -383,6 +389,7 @@ class AgentExecutor:
                 for tool_call, result in zip(tool_calls, pending_tool_results):
                     tool_name = tool_call.name
                     tool_args = tool_call.arguments
+                    logger.debug("  Tool call: %s(%s)", tool_name, tool_args)
 
                     # Record tool call in trace
                     trace.append({
@@ -408,6 +415,11 @@ class AgentExecutor:
                         "tool_call_id": result.tool_call_id,
                         "content": result_text,
                     })
+
+            if state["submitted"]:
+                logger.debug("Agent submitted after %d iterations", iteration)
+            elif iteration >= self.max_iterations:
+                logger.debug("Agent hit max iterations (%d)", self.max_iterations)
 
             # Get final SCAD content
             scad_content = ""
