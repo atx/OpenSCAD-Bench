@@ -2,7 +2,9 @@
 OpenSCAD benchmark for LLMs. An experiment in spatio-textual reasoning capability.
 
 <p align="center">
+  <a href="https://atx.github.io/OpenSCAD-Bench/">
 <img width="847" height="440" alt="image" src="https://github.com/user-attachments/assets/4c0142db-8fdb-42c1-b1b5-5b5cc256accd" />
+  </a>
 </p>
 
 **[View Latest Results →](https://atx.github.io/OpenSCAD-Bench/)**
