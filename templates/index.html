@@ -7,8 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .run-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            display: flex;
+            flex-wrap: nowrap;
             gap: 8px;
         }
         .run-video {
@@ -45,14 +45,22 @@
 <body class="bg-gray-900 text-gray-100 min-h-screen p-6">
     <header class="mb-8">
         <h1 class="text-3xl font-bold">OpenSCAD Bench Results</h1>
-        <p class="text-gray-400 mt-2">LLM benchmark for 3D modeling via OpenSCAD code generation</p>
+        <p class="text-gray-400 mt-2">An experiment in LLM spatio-textual reasoning capabilities. The agents are given tool call allowing them to render screenshots of the models, allowing them to iteratively improve the design. Feel free to click on the individual images to interactively explore the resulting models and read the entire input prompts</p>
+        <p class="text-gray-400 mt-2">See the <a class="text-blue-600" href="https://github.com/atx/OpenSCAD-Bench">GitHub</a> for the source code.</p>
+
     </header>
 
     <div class="overflow-x-auto">
-        <table class="min-w-full border-collapse">
+        <table class="border-collapse" style="table-layout: fixed;">
+            <colgroup>
+                <col>
+                {% for benchmark in benchmarks %}
+                <col style="width: {{ benchmark_max_runs.get(benchmark.id, 1) * 116 }}px;">
+                {% endfor %}
+            </colgroup>
             <thead>
                 <tr>
-                    <th class="border border-gray-700 p-2 bg-gray-800 text-left w-32">Agent</th>
+                    <th class="border border-gray-700 p-2 bg-gray-800 text-left whitespace-nowrap">Agent</th>
                     {% for benchmark in benchmarks %}
                     <th class="border border-gray-700 p-3 bg-gray-800 text-center">
                         <div class="font-semibold">{{ benchmark.name }}</div>
@@ -64,7 +72,7 @@
             <tbody>
                 {% for agent in agents %}
                 <tr>
-                    <td class="border border-gray-700 p-2 bg-gray-800 font-mono text-xs align-top w-32 break-all">
+                    <td class="border border-gray-700 p-2 bg-gray-800 font-mono text-xs align-top whitespace-nowrap">
                         {{ agent }}
                     </td>
                     {% for benchmark in benchmarks %}

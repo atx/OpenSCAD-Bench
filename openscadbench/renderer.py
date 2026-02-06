@@ -233,6 +233,14 @@ class SiteRenderer:
         for key in cells:
             cells[key].sort(key=lambda r: int(r.run_id))
 
+        # Compute max runs per benchmark (for column width weighting)
+        benchmark_max_runs = {}
+        for bid in benchmark_ids:
+            benchmark_max_runs[bid] = max(
+                (len(cells[(agent, bid)]) for agent in agents),
+                default=1,
+            )
+
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
         assets_dir = self.output_dir / "assets"
@@ -272,6 +280,7 @@ class SiteRenderer:
             benchmarks=benchmarks,
             agents=agents,
             cells=cells,
+            benchmark_max_runs=benchmark_max_runs,
         )
         (self.output_dir / "index.html").write_text(html)
 
