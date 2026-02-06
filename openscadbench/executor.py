@@ -35,7 +35,7 @@ def _install_patches():
     class _SafeJson:
         @staticmethod
         def loads(s, **kwargs):
-            if s is None:
+            if not s:
                 return {}
             return _original_json.loads(s, **kwargs)
 
