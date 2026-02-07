@@ -1,0 +1,208 @@
+[
+  {
+    "role": "system",
+    "content": "You are an expert OpenSCAD programmer. Your task is to create a 3D model based on the\nuser's description.\n\nYou have access to the following tools:\n\n- write_scad(content): Write OpenSCAD code to the model file. Returns syntax errors if\n  any. Always provide the complete file contents\u2014this overwrites the previous version.\n\n- render_png(distance, azimuth, elevation): Render the current model from a specific\n  camera angle. Returns a PNG image.\n  - distance: Camera distance from origin (try 200-500 for typical models)\n  - azimuth: Horizontal angle in degrees (0=front, 90=right, 180=back, 270=left)\n  - elevation: Vertical angle in degrees (0=horizon, 90=top-down)\n\n- render_overview(): Render four standard views (front, back, top, isometric) as a\n  single composite image. Use this to quickly check your model from all angles.\n\n- submit(): Call this when you are satisfied with your model.\n\n## Guidelines\n\n1. Start by writing an initial version of the model, then render it to see the result.\n2. Iterate: refine the code, re-render, until satisfied.\n3. Use render_overview() periodically to verify the model looks correct from all angles.\n4. OpenSCAD uses millimeters as the default unit.\n5. When you believe the model meets the requirements, call submit().\n\nCommon OpenSCAD patterns:\n- Difference for subtracting shapes: difference() { base(); cutout(); }\n- Union for combining: union() { part1(); part2(); }\n- Linear extrude for 2D\u21923D: linear_extrude(height) square([x,y]);\n- Translate/rotate for positioning: translate([x,y,z]) rotate([rx,ry,rz]) shape();\n"
+  },
+  {
+    "role": "user",
+    "content": "Design a 3D printer torture test model. It should print as a single piece and\ninclude these features to test various aspects of 3D printer performance:\n\n * a grid of holes from 1-10mm\n * a grid of circular pins from 1-10mm, with 1-5mm of height\n * thin walls between 0.2-2mm\n * bridges of 5-50mm in length\n * overhang angles between 10-70 degrees\n\nThe model should be reasonably compact to facilitate quick printing. Use judgement\nto figure out how many of each feature to include, and how to arrange them in a way\nthat allows for easy measurement and evaluation after printing."
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_write_scad_G2wAIbX7kQ1o7Ne6rJT0",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// 3D Printer Torture Test Model\\n// Features:\\n// - Holes: 1-10mm\\n// - Pins: 2, 4, 6, 8, 10mm\\n// - Thin Walls: 0.2 - 2.0mm\\n// - Bridges: 10, 25, 50mm\\n// - Overhangs: 20-70 degrees\\n\\n$fn = 60;\\n\\n// Main assembly\\nunion() {\\n    base_plate_with_holes();\\n    \\n    translate([10, 20, 3]) pins();\\n    translate([65, 30, 3]) thin_walls();\\n    translate([15, 30, 3]) overhang_tower();\\n    translate([5, 60, 3]) bridges();\\n}\\n\\n// 1. Base Plate with Holes (1-10mm)\\nmodule base_plate_with_holes() {\\n    width = 120;\\n    depth = 80;\\n    height = 3;\\n    \\n    difference() {\\n        // Main plate\\n        rounded_cube([width, depth, height], 2);\\n        \\n        // Holes 1-10mm\\n        // Arrange them along the front edge\\n        // Start X around 5, spacing increases with size\\n        \\n        current_x = 5;\\n        \\n        for (d = [1 : 10]) {\\n            translate([5 + (d*d)/2 + d*5, 8, -1]) \\n            cylinder(h = height + 2, d = d);\\n            \\n            // Text label\\n             translate([5 + (d*d)/2 + d*5, 15, height])\\n             linear_extrude(0.5)\\n             text(str(d), size=2, halign=\"center\");\\n        }\\n        \\n    }\\n    \\n    // Feature Label\\n    translate([60, 2, height]) \\n        linear_extrude(0.5) \\n        text(\"TORTURE TEST\", size=3, halign=\"center\");\\n}\\n\\n// 2. Pins (Different diameters)\\nmodule pins() {\\n    // Diameters: 2, 4, 6, 8, 10\\n    // Heights: range 3-5mm\\n    \\n    x_pos = [0, 10, 20, 32, 46];\\n    diams = [2, 4, 6, 8, 10];\\n    \\n    for (i = [0 : 4]) {\\n        d = diams[i];\\n        h = 3 + (i * 0.5); // Varying height slightly\\n        translate([x_pos[i], 0, 0]) {\\n            cylinder(d=d, h=h);\\n            \\n            // Label\\n            translate([0, -d/2 - 3, 0])\\n             linear_extrude(0.5)\\n             text(str(d), size=2, halign=\"center\");\\n        }\\n    }\\n}\\n\\n// 3. Thin Walls\\nmodule thin_walls() {\\n    thicknesses = [0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0];\\n    height = 10;\\n    length = 10;\\n    gap = 5;\\n    \\n    for (i = [0 : len(thicknesses)-1]) {\\n        t = thicknesses[i];\\n        translate([i * (gap + 1), 0, 0]) {\\n            cube([t, length, height]);\\n            \\n            // Label\\n            translate([0, -4, 0])\\n             linear_extrude(0.5)\\n             text(str(t), size=1.5, halign=\"center\");\\n        }\\n    }\\n    \\n    // Label for section\\n    translate([0, -8, 0])\\n        linear_extrude(0.5)\\n        text(\"WALLS\", size=3);\\n}\\n\\n// 4. Overhang Tower\\nmodule overhang_tower() {\\n    // Angles from vertical: 20, 30, 45, 60, 70\\n    angles = [20, 30, 45, 60, 70];\\n    step_height = 5;\\n    width = 20;\\n    thickness = 10;\\n    \\n    // Base column\\n    cube([width, thickness, 5]);\\n    \\n    // Stacked overhangs\\n    current_z = 5;\\n    \\n    for (a = angles) {\\n        // Calculate horizontal offset for this angle and height\\n        // tan(angle) = opposite/adjacent -> dx = h * tan(angle)\\n        dx = step_height * tan(a);\\n        \\n        translate([0, 0, current_z]) {\\n            // Straight block part\\n            cube([width, thickness, step_height]);\\n            \\n            // Overhang part (triangle prism + rectangle)\\n            // We use a polygon and extrusion for the side profile\\n            translate([width, 0, 0])\\n            rotate([90, 0, 90])\\n            linear_extrude(width)\\n            polygon(points=[\\n                [0,0], \\n                [thickness, 0], \\n                [thickness, step_height], \\n                [thickness + dx, step_height]\\n            ]);\\n            \\n            // Label\\n            translate([width/2, -1, 1])\\n            rotate([90,0,0])\\n            linear_extrude(0.5)\\n            text(str(a), size=3, halign=\"center\");\\n        }\\n        \\n        current_z = current_z + step_height;\\n    }\\n}\\n\\n// 5. Bridges\\nmodule bridges() {\\n    // Spans: 10, 25, 50\\n    // Pillar size: 5x5\\n    spans = [10, 25, 50];\\n    pillar_w = 6;\\n    pillar_d = 6;\\n    pillar_h = 15;\\n    \\n    current_x = 0;\\n    \\n    for (span = spans) {\\n        // Left Pillar\\n        translate([current_x, 0, 0])\\n            cube([pillar_w, pillar_d, pillar_h]);\\n        \\n        // Beam across top\\n        translate([current_x, 0, pillar_h - 2])\\n            cube([pillar_w + span + pillar_w, pillar_d, 2]);\\n            \\n        // Right Pillar handled by next iteration or final closure\\n        // Actually slightly better to draw the gap:\\n        \\n        // Draw Right Pillar relative to Left\\n        translate([current_x + pillar_w + span, 0, 0])\\n            cube([pillar_w, pillar_d, pillar_h]);\\n            \\n        // Label on bridge\\n        translate([current_x + pillar_w + span/2, pillar_d/2, pillar_h - 1.5]) // embedded\\n            color(\"red\") // just for preview\\n            translate([0, -pillar_d, 0]) // moved to front face of pillar/bridge actually for readability\\n            text(str(span), size=3);\\n            \\n        // Label on bed\\n         translate([current_x + pillar_w + span/2, -4, 0])\\n             linear_extrude(0.5)\\n             text(str(span), size=3, halign=\"center\");\\n            \\n        current_x = current_x + pillar_w + span;\\n    }\\n}\\n\\n// Helper: Rounded Cube\\nmodule rounded_cube(size, r) {\\n    hull() {\\n        translate([r, r, 0]) cylinder(h=size[2], r=r);\\n        translate([size[0]-r, r, 0]) cylinder(h=size[2], r=r);\\n        translate([size[0]-r, size[1]-r, 0]) cylinder(h=size[2], r=r);\\n        translate([r, size[1]-r, 0]) cylinder(h=size[2], r=r);\\n    }\\n}\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_write_scad_G2wAIbX7kQ1o7Ne6rJT0",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_render_overview_hPWES4zeWqJ5z1Y4juRk",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_render_overview_hPWES4zeWqJ5z1Y4juRk",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_write_scad_4P9o0v8cWlGX3XDb25ji",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// 3D Printer Torture Test v2\\n// Compact, single-piece design\\n\\n$fn = 60;\\n\\n// Dimensions\\nbase_w = 120;\\nbase_d = 100;\\nbase_h = 2;\\n\\nmodule main() {\\n    difference() {\\n        union() {\\n            // Main Base Plate\\n            rounded_cube([base_w, base_d, base_h], 3);\\n            \\n            // Features\\n            translate([10, 10, base_h]) feature_pins();\\n            translate([80, 10, base_h]) feature_walls();\\n            translate([10, 40, base_h]) feature_overhangs();\\n            translate([5, 75, base_h]) feature_bridges();\\n        }\\n        \\n        // Subtract Holes from Base\\n        // Located at [60, 40] area?\\n        // Let\\'s create a dedicated area for holes in the base\\n        translate([50, 45, -1]) feature_holes_cutout();\\n        \\n        // Text Labels (embossed into base)\\n        translate([base_w/2, 2, base_h]) \\n            linear_extrude(1) \\n            text(\"PRINTER TEST\", size=4, halign=\"center\");\\n    }\\n}\\n\\n// 1. PINs (Cylinders)\\n// Diameters: 2, 4, 6, 8, 10\\n// Located bottom-left\\nmodule feature_pins() {\\n    diams = [2, 4, 6, 8, 10];\\n    spacing = 15;\\n    \\n    // Label\\n    translate([0, -5, 0]) label(\"PINS\");\\n\\n    for(i=[0:len(diams)-1]) {\\n        d = diams[i];\\n        // Distribute in a grid 2x3 to save space or line?\\n        // Line fits: 5 pins * 15mm = 75mm.\\n        // We have ~60mm width allocated.\\n        // Let\\'s do 2 rows.\\n        \\n        row = (i < 3) ? 0 : 1;\\n        col = (i < 3) ? i : i-3;\\n        \\n        px = col * spacing;\\n        py = row * spacing;\\n        h = 4 + i; // Heights 4-8mm to test cooling/retraction\\n        \\n        translate([px + d/2, py + d/2, 0]) {\\n            cylinder(d=d, h=h);\\n            // Label\\n             translate([0, -d/2 - 2, 0]) label(str(d), 1.5);\\n        }\\n    }\\n}\\n\\n// 2. WALLS (Thin strips)\\n// Thickness: 0.2, 0.4, 0.6, 0.8, 1.0, 1.2\\n// Located bottom-right\\nmodule feature_walls() {\\n    thicks = [0.2, 0.4, 0.6, 0.8, 1.0, 1.5];\\n    spacing = 5;\\n    \\n    translate([0, -5, 0]) label(\"WALLS\");\\n    \\n    for(i=[0:len(thicks)-1]) {\\n        t = thicks[i];\\n        translate([i * spacing, 0, 0]) {\\n            cube([t, 10, 10]); // 10mm long, 10mm high\\n             translate([t/2, -2, 0]) label(str(t), 1.2);\\n        }\\n    }\\n}\\n\\n// 3. OVERHANGS\\n// Angles: 30, 45, 60, 70\\n// Stacked tower\\nmodule feature_overhangs() {\\n    angles = [30, 45, 60, 70];\\n    step_h = 6;\\n    base_w = 15;\\n    depth = 8;\\n    \\n    translate([0, -5, 0]) label(\"OVERHANG\");\\n    \\n    // Central pillar\\n    cube([10, depth, step_h * len(angles) + 5]);\\n    \\n    current_z = 5;\\n    for(a = angles) {\\n        // Calculate stick-out\\n        // tan(a) = dx / dz\\n        dx = step_h * tan(a);\\n        \\n        translate([0, 0, current_z]) {\\n            // Right side extension\\n            // Polygon profile in X-Z plane\\n            translate([10, 0, 0]) \\n            rotate([90, 0, 90])\\n            linear_extrude(10) // width of extrusion joining pillar\\n            polygon([[0,0], [depth,0], [depth, step_h], [dx, step_h]]);\\n            \\n            // Note: The polygon above makes a chamfer shape.\\n            // We want smooth overhang.\\n            // Let\\'s use hull of two rectangles\\n            hull() {\\n                translate([10, 0, 0]) cube([0.1, depth, step_h]); // flush with pillar\\n                translate([10 + dx, 0, step_h-0.1]) cube([0.1, depth, 0.1]); // tip\\n            }\\n            // Fill the top surface\\n            translate([10, 0, step_h-0.1]) cube([dx, depth, 0.1]);\\n            // Fill the triangle volume\\n            // Actually, simply:\\n             translate([10, 0, 0])\\n             multmatrix(m = [ [1, 0, tan(a), 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1] ])\\n             cube([0.5, depth, step_h]); // A thin angled slice? No.\\n\\n             // Let\\'s stick to the polygon extrusion, simpler.\\n             // Desired profile on Front Face (XZ):\\n             // (10, 0) -> (10, step_h) -> (10+dx, step_h) -> close\\n             // Extruded along Y (depth)\\n             \\n             translate([10, depth, 0]) rotate([90,0,0])\\n             linear_extrude(depth)\\n             polygon([[0,0], [0, step_h], [dx, step_h]]);\\n             \\n             // Label angle\\n             translate([5, depth+0.5, step_h/2]) \\n             rotate([90, 0, 0])\\n             label(str(a), 2.5);\\n        }\\n        current_z = current_z + step_h;\\n    }\\n}\\n\\n// 4. HOLES (Subtraction from base)\\n// Diameters: 2, 4, 6, 8, 10, 12? Just 2-10\\nmodule feature_holes_cutout() {\\n    diams = [2, 3, 4, 5, 6, 8, 10];\\n    \\n    // We need to layout carefully so they don\\'t intersect\\n    // 2 rows\\n    \\n    y_offsets = [0, 15];\\n    x_start = 0;\\n    \\n    for(i=[0:len(diams)-1]) {\\n        d = diams[i];\\n        row = (i % 2);\\n        col = floor(i / 2);\\n        \\n        // Variable spacing\\n        px = col * 12 + (col*col)*0.2; // roughly\\n        py = row * 15;\\n        \\n        translate([px, py, 0]) {\\n            cylinder(d=d, h=10);\\n            \\n            // Label on the base surface (re-added as union later or just keep text separated?)\\n            // Since this is a difference module, we can\\'t add text here easily unless we invert it.\\n            // We\\'ll trust the user to measure holes or add text in the main union.\\n        }\\n    }\\n}\\n\\n// 5. BRIDGES\\n// Spans: 10, 20, 30, 40, 50\\nmodule feature_bridges() {\\n    spans = [10, 20, 30, 40, 50];\\n    pillar_Size = 5;\\n    height = 12;\\n    depth = 6;\\n    \\n    translate([0, -5, 0]) label(\"BRIDGES\");\\n    \\n    cursor_x = 0;\\n    \\n    for(s = spans) {\\n        // Pillar\\n        translate([cursor_x, 0, 0]) cube([pillar_Size, depth, height]);\\n        \\n        // Bridge top\\n        translate([cursor_x + pillar_Size, 0, height-2]) \\n            cube([s, depth, 2]);\\n            \\n        // Label underneath\\n        translate([cursor_x + pillar_Size + s/2, -2, 0]) label(str(s), 2);\\n            \\n        cursor_x = cursor_x + pillar_Size + s;\\n    }\\n    // Final pillar\\n    translate([cursor_x, 0, 0]) cube([pillar_Size, depth, height]);\\n}\\n\\n// Helper: Text Label\\nmodule label(txt, sz=3) {\\n    linear_extrude(0.5) text(txt, size=sz, halign=\"center\");\\n}\\n\\n// Helper: Rounded Cube\\nmodule rounded_cube(size, r) {\\n    hull() {\\n        translate([r, r, 0]) cylinder(h=size[2], r=r);\\n        translate([size[0]-r, r, 0]) cylinder(h=size[2], r=r);\\n        translate([size[0]-r, size[1]-r, 0]) cylinder(h=size[2], r=r);\\n        translate([r, size[1]-r, 0]) cylinder(h=size[2], r=r);\\n    }\\n}\\n\\nmain();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_write_scad_4P9o0v8cWlGX3XDb25ji",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_render_overview_HcbwDBVP2mO6QgUmXPJh",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_render_overview_HcbwDBVP2mO6QgUmXPJh",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_write_scad_EFLZDPoKF6uu4Xnye5nb",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// 3D Printer Torture Test v3\\n// Features covering:\\n// - Holes: 1-10mm\\n// - Pins: 1-10mm\\n// - Walls: 0.2-2.0mm\\n// - Bridges: 10-50mm\\n// - Overhangs: 15-70 degrees\\n\\n$fn = 60;\\n\\n// Main Dimensions\\nbase_w = 110;\\nbase_d = 110;\\nbase_h = 2;\\n\\nmodule main() {\\n    difference() {\\n        union() {\\n            // Base rounded\\n            rounded_cube([base_w, base_d, base_h], 3);\\n            \\n            // Feature: Pins (Front Left)\\n            translate([5, 5, base_h]) feature_pins();\\n            \\n            // Feature: Walls (Front Right)\\n            translate([75, 5, base_h]) feature_walls();\\n            \\n            // Feature: Overhangs (Middle Left)\\n            translate([5, 45, base_h]) feature_overhangs();\\n            \\n            // Feature: Bridges (Back)\\n            translate([5, 85, base_h]) feature_bridges();\\n            \\n            // Labels for Holes (Middle Right)\\n            translate([55, 45, base_h]) feature_hole_labels();\\n            \\n            // Main Label\\n            translate([base_w/2, 2, base_h]) \\n                linear_extrude(0.6) \\n                text(\"TEST v3\", size=4, halign=\"center\");\\n        }\\n        \\n        // Subtract Holes (Middle Right)\\n        translate([55, 45, -1]) feature_holes_cutout();\\n    }\\n}\\n\\n// 1. PINS\\n// 1, 2, 4, 6, 8, 10\\nmodule feature_pins() {\\n    diams = [1, 2, 4, 6, 8, 10];\\n    \\n    // Layout: 2 rows of 3\\n    // Row 1: 1, 2, 4\\n    // Row 2: 6, 8, 10\\n    \\n    translate([0, -2, 0]) label(\"PINS\");\\n    \\n    for (i = [0:len(diams)-1]) {\\n        d = diams[i];\\n        \\n        row = floor(i/3);\\n        col = i % 3;\\n        \\n        px = col * 15 + 5;\\n        py = row * 15 + 5;\\n        \\n        h = d < 4 ? 3 : (d/2 + 3); // Scale height a bit\\n        \\n        translate([px, py, 0]) {\\n            cylinder(d=d, h=h);\\n            translate([0, -d/2 - 2, 0]) label(str(d), 1.5);\\n        }\\n    }\\n}\\n\\n// 2. WALLS\\n// 0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0\\nmodule feature_walls() {\\n    thicks = [0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0];\\n    spacing = 5;\\n    \\n    translate([0, -2, 0]) label(\"WALLS\");\\n    \\n    for(i=[0:len(thicks)-1]) {\\n        t = thicks[i];\\n        translate([i * spacing, 5, 0]) {\\n            cube([t, 8, 10]);\\n            translate([t/2, -2, 0]) label(str(t), 1.2);\\n        }\\n    }\\n}\\n\\n// 3. OVERHANGS\\n// 15, 30, 45, 60, 70\\nmodule feature_overhangs() {\\n    angles = [15, 30, 45, 60, 70];\\n    step_h = 5;\\n    pillar_d = 8;\\n    \\n    translate([0, -2, 0]) label(\"OVERHANG\");\\n    \\n    // Pillar\\n    cube([10, pillar_d, len(angles)*step_h + 2]);\\n    \\n    z = 2;\\n    for(a = angles) {\\n        dx = step_h * tan(a);\\n        \\n        translate([0, 0, z]) {\\n            // The Overhang Object\\n            // Extrude a triangle along Y\\n            // Triangle: (0,0) -> (dx, step_h) -> (0, step_h)\\n            // Slope is the hypotenuse from 0,0 to dx,step_h\\n            \\n            translate([10-0.01, 0, 0]) // Overlap slightly\\n            difference() {\\n                 cube([dx, pillar_d, step_h]);\\n                 \\n                 // Cut away the bottom to create angle\\n                 // Slope equation: z = x / tan(a)\\n                 // Or we use rotate/cube\\n                 translate([0, -1, 0])\\n                 rotate([0, 90-a, 0])\\n                 cube([step_h*3, pillar_d+2, step_h*3]);\\n            }\\n            \\n            // Label\\n            translate([5, pillar_d/2, step_h/2])\\n            rotate([90,0,0])\\n            label(str(a), 2.5);\\n        }\\n        z = z + step_h;\\n    }\\n}\\n\\n// 4. HOLES (Subtractive)\\n// 1, 2, 3, 4, 5, 6, 8, 10\\nmodule feature_holes_cutout() {\\n    // 2 Rows\\n    // R1: 1,2,3,4\\n    // R2: 5,6,8,10\\n    \\n    r1 = [1, 2, 3, 4];\\n    r2 = [5, 6, 8, 10];\\n    \\n    // Row 1\\n    for(i=[0:len(r1)-1]) {\\n        d = r1[i];\\n        translate([i*10 + 5, 5, 0]) cylinder(d=d, h=10);\\n    }\\n    \\n    // Row 2\\n    for(i=[0:len(r2)-1]) {\\n        d = r2[i];\\n        translate([i*14 + 5, 20, 0]) cylinder(d=d, h=10);\\n    }\\n}\\n\\nmodule feature_hole_labels() {\\n    translate([0, -2, 0]) label(\"HOLES\");\\n    \\n    r1 = [1, 2, 3, 4];\\n    r2 = [5, 6, 8, 10];\\n    \\n    // Row 1\\n    for(i=[0:len(r1)-1]) {\\n        d = r1[i];\\n        translate([i*10 + 5, 10, 0]) label(str(d), 1.5);\\n    }\\n    \\n    // Row 2\\n    for(i=[0:len(r2)-1]) {\\n        d = r2[i];\\n        translate([i*14 + 5, 28, 0]) label(str(d), 1.5);\\n    }\\n}\\n\\n// 5. BRIDGES\\nmodule feature_bridges() {\\n    spans = [10, 20, 30, 40, 50];\\n    pillar = 5;\\n    depth = 6;\\n    h = 10;\\n    \\n    translate([0, -2, 0]) label(\"BRIDGES\");\\n    \\n    x = 0;\\n    for(s = spans) {\\n        // Pillar\\n        translate([x, 0, 0]) cube([pillar, depth, h]);\\n        // Span\\n        translate([x+pillar, 0, h-1.5]) cube([s, depth, 1.5]);\\n        // Label\\n        translate([x+pillar + s/2, -1, 0]) label(str(s), 2);\\n        \\n        x = x + pillar + s;\\n    }\\n    // End pillar\\n    translate([x, 0, 0]) cube([pillar, depth, h]);\\n}\\n\\n// Helpers\\nmodule label(txt, sz=3) {\\n    linear_extrude(0.6) text(txt, size=sz, halign=\"center\");\\n}\\n\\nmodule rounded_cube(size, r) {\\n    hull() {\\n        translate([r, r, 0]) cylinder(h=size[2], r=r);\\n        translate([size[0]-r, r, 0]) cylinder(h=size[2], r=r);\\n        translate([size[0]-r, size[1]-r, 0]) cylinder(h=size[2], r=r);\\n        translate([r, size[1]-r, 0]) cylinder(h=size[2], r=r);\\n    }\\n}\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_write_scad_EFLZDPoKF6uu4Xnye5nb",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_write_scad_Y6CI0gOPZyjyEBcnwWH0",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// 3D Printer Torture Test Final\\n// Features: Holes, Pins, Walls, Bridges, Overhangs\\n// Compact design\\n\\n$fn = 60;\\n\\n// Dimensions\\nbase_w = 110;\\nbase_d = 100;\\nbase_h = 2;\\n\\nmodule main() {\\n    difference() {\\n        union() {\\n            // Base\\n            rounded_cube([base_w, base_d, base_h], 3);\\n            \\n            // Feature: Pins (Front Left)\\n            translate([5, 5, base_h]) feature_pins();\\n            \\n            // Feature: Walls (Front Right)\\n            translate([65, 5, base_h]) feature_walls();\\n            \\n            // Feature: Overhangs (Middle Left)\\n            translate([5, 35, base_h]) feature_overhangs();\\n            \\n            // Feature: Bridges (Back)\\n            // Bridges total width ~100mm. Center it.\\n            translate([5, 80, base_h]) feature_bridges();\\n            \\n            // Labels for Holes (Middle Right)\\n            translate([55, 45, base_h]) feature_hole_labels();\\n            \\n            // Main Label\\n            translate([base_w/2, 2, base_h]) \\n                linear_extrude(0.6) \\n                text(\"TEST v4\", size=4, halign=\"center\");\\n        }\\n        \\n        // Subtract Holes (Middle Right)\\n        translate([55, 45, -1]) feature_holes_cutout();\\n    }\\n}\\n\\n// 1. PINS\\nmodule feature_pins() {\\n    diams = [2, 3, 4, 6, 8, 10];\\n    translate([0, -2, 0]) label(\"PINS\");\\n    \\n    // 2 Rows of 3\\n    for (i = [0:len(diams)-1]) {\\n        d = diams[i];\\n        row = floor(i/3);\\n        col = i % 3;\\n        \\n        px = col * 15 + 5;\\n        py = row * 15 + 5;\\n        h = d < 4 ? 4 : (d/2 + 3);\\n        \\n        translate([px, py, 0]) {\\n            cylinder(d=d, h=h);\\n            translate([0, -d/2 - 2, 0]) label(str(d), 1.5);\\n        }\\n    }\\n}\\n\\n// 2. WALLS\\nmodule feature_walls() {\\n    thicks = [0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0];\\n    translate([0, -2, 0]) label(\"WALLS\");\\n    \\n    for(i=[0:len(thicks)-1]) {\\n        t = thicks[i];\\n        translate([i * 6, 5, 0]) {\\n            cube([t, 8, 10]);\\n            translate([t/2, -2, 0]) label(str(t), 1.2);\\n        }\\n    }\\n}\\n\\n// 3. OVERHANGS\\nmodule feature_overhangs() {\\n    angles = [15, 30, 45, 60, 70];\\n    step_h = 6;\\n    pillar_d = 10;\\n    pillar_w = 10;\\n    \\n    translate([0, -2, 0]) label(\"OVERHANG\");\\n    \\n    // Central Pillar\\n    cube([pillar_w, pillar_d, len(angles)*step_h + 2]);\\n    \\n    z = 0;\\n    for(a = angles) {\\n        // dx = how much it sticks out\\n        dx = step_h * tan(a);\\n        \\n        translate([0, 0, z]) {\\n            \\n            // Attach to Right Side\\n            translate([pillar_w - 0.01, 0, 0]) \\n            rotate([90, 0, 90]) // Extrude along X (+90 rot around Y from Z)\\n            linear_extrude(pillar_w) // Length of the overhang block (along X axis visually)\\n               // ACTUALLY:\\n               // polygon is in XY plane. Extrusion is Z.\\n               // Rotate pulls Z to horizontal.\\n               // Let\\'s formulate polygon in XZ coordinates and extrude Y.\\n               \\n            translate([pillar_w, pillar_d, 0])\\n            rotate([90, 0, 0])\\n            linear_extrude(pillar_d)\\n            polygon([[0,0], [dx, step_h], [0, step_h]]);\\n            \\n            // Label\\n            translate([pillar_w/2, pillar_d/2, step_h/2])\\n            rotate([90, 0, 0])\\n             label(str(a), 2.5);\\n        }\\n        z = z + step_h;\\n    }\\n}\\n\\n// 4. HOLES\\nmodule feature_holes_cutout() {\\n    r1 = [2, 3, 4, 5];\\n    r2 = [6, 8, 10];\\n    \\n    // Row 1\\n    for(i=[0:len(r1)-1]) {\\n        d = r1[i];\\n        translate([i*10 + 5, 5, 0]) cylinder(d=d, h=10);\\n    }\\n    // Row 2\\n    for(i=[0:len(r2)-1]) {\\n        d = r2[i];\\n        translate([i*15 + 5, 22, 0]) cylinder(d=d, h=10);\\n    }\\n}\\n\\nmodule feature_hole_labels() {\\n    translate([0, -2, 0]) label(\"HOLES\");\\n    r1 = [2, 3, 4, 5];\\n    r2 = [6, 8, 10];\\n    \\n    for(i=[0:len(r1)-1]) {\\n        d = r1[i];\\n        translate([i*10 + 5, 11, 0]) label(str(d), 1.5);\\n    }\\n    for(i=[0:len(r2)-1]) {\\n        d = r2[i];\\n        translate([i*15 + 5, 30, 0]) label(str(d), 1.5);\\n    }\\n}\\n\\n// 5. BRIDGES\\nmodule feature_bridges() {\\n    spans = [10, 20, 30, 40];\\n    pillar = 5;\\n    depth = 8;\\n    h = 10;\\n    \\n    translate([0, -2, 0]) label(\"BRIDGES\");\\n    \\n    x = 0;\\n    for(s = spans) {\\n        // Pillar\\n        translate([x, 0, 0]) cube([pillar, depth, h]);\\n        // Bridge\\n        translate([x+pillar, 0, h-1.5]) cube([s, depth, 1.5]);\\n        // Label\\n        translate([x+pillar+s/2, -1, 0]) label(str(s), 2.5);\\n        \\n        x = x + pillar + s;\\n    }\\n    translate([x, 0, 0]) cube([pillar, depth, h]);\\n}\\n\\n// Helpers\\nmodule label(txt, sz=3) {\\n    linear_extrude(0.6) text(txt, size=sz, halign=\"center\");\\n}\\n\\nmodule rounded_cube(size, r) {\\n    hull() {\\n        translate([r, r, 0]) cylinder(h=size[2], r=r);\\n        translate([size[0]-r, r, 0]) cylinder(h=size[2], r=r);\\n        translate([size[0]-r, size[1]-r, 0]) cylinder(h=size[2], r=r);\\n        translate([r, size[1]-r, 0]) cylinder(h=size[2], r=r);\\n    }\\n}\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_write_scad_Y6CI0gOPZyjyEBcnwWH0",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_write_scad_2t6yycPpPiwAtcvlhdQa",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// 3D Printer Torture Test Final\\n// Features: Holes, Pins, Walls, Bridges, Overhangs\\n// Compact design\\n\\n$fn = 60;\\n\\n// Dimensions\\nbase_w = 130;\\nbase_d = 100;\\nbase_h = 2;\\n\\nmodule main() {\\n    difference() {\\n        union() {\\n            // Base\\n            rounded_cube([base_w, base_d, base_h], 3);\\n            \\n            // Feature: Pins (Front Left)\\n            translate([5, 5, base_h]) feature_pins();\\n            \\n            // Feature: Walls (Front Right)\\n            translate([75, 5, base_h]) feature_walls();\\n            \\n            // Feature: Overhangs (Middle Left)\\n            translate([5, 45, base_h]) feature_overhangs();\\n            \\n            // Feature: Bridges (Back)\\n            translate([2, 85, base_h]) feature_bridges();\\n            \\n            // Labels for Holes (Middle Right)\\n            translate([60, 45, base_h]) feature_hole_labels();\\n            \\n            // Main Label\\n            translate([base_w/2, 2, base_h]) \\n                linear_extrude(0.6) \\n                text(\"TEST BOARD\", size=4, halign=\"center\");\\n        }\\n        \\n        // Subtract Holes (Middle Right)\\n        translate([60, 45, -1]) feature_holes_cutout();\\n    }\\n}\\n\\n// 1. PINS\\nmodule feature_pins() {\\n    diams = [2, 3, 4, 6, 8, 10];\\n    translate([0, -2, 0]) label(\"PINS\");\\n    \\n    // 2 Rows of 3\\n    for (i = [0:len(diams)-1]) {\\n        d = diams[i];\\n        row = floor(i/3);\\n        col = i % 3;\\n        \\n        px = col * 15 + 5;\\n        py = row * 15 + 5;\\n        h = d < 4 ? 4 : (d/2 + 3);\\n        \\n        translate([px, py, 0]) {\\n            cylinder(d=d, h=h);\\n            translate([0, -d/2 - 2, 0]) label(str(d), 1.5);\\n        }\\n    }\\n}\\n\\n// 2. WALLS\\nmodule feature_walls() {\\n    thicks = [0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2.0];\\n    translate([0, -2, 0]) label(\"WALLS\");\\n    \\n    for(i=[0:len(thicks)-1]) {\\n        t = thicks[i];\\n        translate([i * 6, 5, 0]) {\\n            cube([t, 8, 10]);\\n            translate([t/2, -2, 0]) label(str(t), 1.2);\\n        }\\n    }\\n}\\n\\n// 3. OVERHANGS\\nmodule feature_overhangs() {\\n    angles = [15, 30, 45, 60, 70];\\n    step_h = 6;\\n    pillar_d = 10;\\n    pillar_w = 10;\\n    \\n    translate([0, -2, 0]) label(\"OVERHANG\");\\n    \\n    // Central Pillar\\n    cube([pillar_w, pillar_d, len(angles)*step_h + 2]);\\n    \\n    z = 0;\\n    for(a = angles) {\\n        // dx = how much it sticks out\\n        dx = step_h * tan(a);\\n        \\n        translate([0, 0, z]) {\\n            \\n            // Attach to Right Side\\n            translate([pillar_w - 0.01, pillar_d, 0]) \\n            rotate([90, 0, 0]) // Extrude along Y\\n            linear_extrude(pillar_d)\\n            polygon([[0,0], [dx, step_h], [0, step_h]]);\\n            \\n            // Label\\n            translate([pillar_w/2, pillar_d/2, step_h/2])\\n            rotate([90, 0, 0])\\n             label(str(a), 2.5);\\n        }\\n        z = z + step_h;\\n    }\\n}\\n\\n// 4. HOLES\\nmodule feature_holes_cutout() {\\n    r1 = [2, 3, 4, 5];\\n    r2 = [6, 8, 10];\\n    \\n    // Row 1\\n    for(i=[0:len(r1)-1]) {\\n        d = r1[i];\\n        translate([i*10 + 5, 5, 0]) cylinder(d=d, h=10);\\n    }\\n    // Row 2\\n    for(i=[0:len(r2)-1]) {\\n        d = r2[i];\\n        translate([i*15 + 5, 22, 0]) cylinder(d=d, h=10);\\n    }\\n}\\n\\nmodule feature_hole_labels() {\\n    translate([0, -2, 0]) label(\"HOLES\");\\n    r1 = [2, 3, 4, 5];\\n    r2 = [6, 8, 10];\\n    \\n    for(i=[0:len(r1)-1]) {\\n        d = r1[i];\\n        translate([i*10 + 5, 11, 0]) label(str(d), 1.5);\\n    }\\n    for(i=[0:len(r2)-1]) {\\n        d = r2[i];\\n        translate([i*15 + 5, 30, 0]) label(str(d), 1.5);\\n    }\\n}\\n\\n// 5. BRIDGES\\nmodule feature_bridges() {\\n    spans = [10, 20, 30, 40];\\n    pillar = 5;\\n    depth = 8;\\n    h = 10;\\n    \\n    translate([0, -2, 0]) label(\"BRIDGES\");\\n    \\n    x = 0;\\n    for(s = spans) {\\n        // Pillar\\n        translate([x, 0, 0]) cube([pillar, depth, h]);\\n        // Bridge\\n        translate([x+pillar, 0, h-1.5]) cube([s, depth, 1.5]);\\n        // Label\\n        translate([x+pillar+s/2, -1, 0]) label(str(s), 2.5);\\n        \\n        x = x + pillar + s;\\n    }\\n    translate([x, 0, 0]) cube([pillar, depth, h]);\\n}\\n\\n// Helpers\\nmodule label(txt, sz=3) {\\n    linear_extrude(0.6) text(txt, size=sz, halign=\"center\");\\n}\\n\\nmodule rounded_cube(size, r) {\\n    hull() {\\n        translate([r, r, 0]) cylinder(h=size[2], r=r);\\n        translate([size[0]-r, r, 0]) cylinder(h=size[2], r=r);\\n        translate([size[0]-r, size[1]-r, 0]) cylinder(h=size[2], r=r);\\n        translate([r, size[1]-r, 0]) cylinder(h=size[2], r=r);\\n    }\\n}\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_write_scad_2t6yycPpPiwAtcvlhdQa",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_render_overview_aFVzle1DixTkuTu10JZK",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_render_overview_aFVzle1DixTkuTu10JZK",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_submit_QEunO73YMc8HucCx4jKy",
+        "type": "function",
+        "function": {
+          "name": "submit",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_submit_QEunO73YMc8HucCx4jKy",
+    "content": "{\"success\": true, \"message\": \"Solution submitted\"}"
+  }
+]

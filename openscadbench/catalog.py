@@ -75,6 +75,24 @@ are captured but free to rotate after printing. Ensure bridge surfaces are
 supported or self-supporting (no overhangs exceeding 45°). Ensure that adequate
 clearances are provided between all moving parts to prevent fusion during printing.
 """
+    ),
+    Benchmark(
+        id="torture_test",
+        name="3D Printer Torture Test",
+        prompt="""
+Design a 3D printer torture test model. It should print as a single piece and
+include these features to test various aspects of 3D printer performance:
+
+ * a grid of holes from 1-10mm
+ * a grid of circular pins from 1-10mm, with 1-5mm of height
+ * thin walls between 0.2-2mm
+ * bridges of 5-50mm in length
+ * overhang angles between 10-70 degrees
+
+The model should be reasonably compact to facilitate quick printing. Use judgement
+to figure out how many of each feature to include, and how to arrange them in a way
+that allows for easy measurement and evaluation after printing.
+"""
     )
 ]
 

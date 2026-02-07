@@ -1,0 +1,186 @@
+[
+  {
+    "role": "system",
+    "content": "You are an expert OpenSCAD programmer. Your task is to create a 3D model based on the\nuser's description.\n\nYou have access to the following tools:\n\n- write_scad(content): Write OpenSCAD code to the model file. Returns syntax errors if\n  any. Always provide the complete file contents\u2014this overwrites the previous version.\n\n- render_png(distance, azimuth, elevation): Render the current model from a specific\n  camera angle. Returns a PNG image.\n  - distance: Camera distance from origin (try 200-500 for typical models)\n  - azimuth: Horizontal angle in degrees (0=front, 90=right, 180=back, 270=left)\n  - elevation: Vertical angle in degrees (0=horizon, 90=top-down)\n\n- render_overview(): Render four standard views (front, back, top, isometric) as a\n  single composite image. Use this to quickly check your model from all angles.\n\n- submit(): Call this when you are satisfied with your model.\n\n## Guidelines\n\n1. Start by writing an initial version of the model, then render it to see the result.\n2. Iterate: refine the code, re-render, until satisfied.\n3. Use render_overview() periodically to verify the model looks correct from all angles.\n4. OpenSCAD uses millimeters as the default unit.\n5. When you believe the model meets the requirements, call submit().\n\nCommon OpenSCAD patterns:\n- Difference for subtracting shapes: difference() { base(); cutout(); }\n- Union for combining: union() { part1(); part2(); }\n- Linear extrude for 2D\u21923D: linear_extrude(height) square([x,y]);\n- Translate/rotate for positioning: translate([x,y,z]) rotate([rx,ry,rz]) shape();\n"
+  },
+  {
+    "role": "user",
+    "content": "Design a 3D printer torture test model. It should print as a single piece and\ninclude these features to test various aspects of 3D printer performance:\n\n * a grid of holes from 1-10mm\n * a grid of circular pins from 1-10mm, with 1-5mm of height\n * thin walls between 0.2-2mm\n * bridges of 5-50mm in length\n * overhang angles between 10-70 degrees\n\nThe model should be reasonably compact to facilitate quick printing. Use judgement\nto figure out how many of each feature to include, and how to arrange them in a way\nthat allows for easy measurement and evaluation after printing."
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_write_scad_YZBDzRb3fFBoOLgvcINL",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': \"// 3D Printer Torture Test\\n$fn = 32;\\n\\nbase_w = 100;\\nbase_d = 80;\\nbase_h = 3;\\n\\nmodule base() {\\n    cube([base_w, base_d, base_h]);\\n}\\n\\n// 1. Grid of Holes (1mm to 10mm)\\nmodule holes() {\\n    hole_sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];\\n    for (i = [0:len(hole_sizes)-1]) {\\n        x_pos = 10 + (i % 5) * 15;\\n        y_pos = 10 + floor(i / 5) * 15;\\n        translate([x_pos, y_pos, -1])\\n            cylinder(h = base_h + 2, d = hole_sizes[i]);\\n    }\\n}\\n\\n// 2. Circular Pins (1mm to 10mm wide, varying height)\\nmodule pins() {\\n    pin_sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];\\n    for (i = [0:len(pin_sizes)-1]) {\\n        x_pos = 10 + (i % 5) * 15;\\n        y_pos = 45 + floor(i / 5) * 15;\\n        height = 1 + (i % 5); // 1-5mm height\\n        translate([x_pos, y_pos, base_h])\\n            cylinder(h = height, d = pin_sizes[i]);\\n    }\\n}\\n\\n// 3. Thin Walls (0.2mm to 2.0mm)\\nmodule thin_walls() {\\n    wall_thicknesses = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0];\\n    for (i = [0:len(wall_thicknesses)-1]) {\\n        translate([85, 10 + i*8, base_h])\\n            cube([10, wall_thicknesses[i], 10]);\\n    }\\n}\\n\\n// 4. Bridges (5mm to 50mm)\\nmodule bridges() {\\n    bridge_lengths = [5, 10, 15, 20, 25, 30, 40, 50];\\n    start_x = 5;\\n    start_y = 5;\\n    // We'll place bridges elevated on pillars\\n    for (i = [0:len(bridge_lengths)-1]) {\\n        y_pos = 5 + i * 8;\\n        // Pillars\\n        translate([85, y_pos, base_h]) cube([2, 5, 15]);\\n        translate([85 - bridge_lengths[i], y_pos, base_h]) cube([2, 5, 15]);\\n        // Bridge span\\n        translate([85 - bridge_lengths[i], y_pos, base_h + 15]) \\n            cube([bridge_lengths[i] + 2, 5, 2]);\\n    }\\n}\\n\\n// 5. Overhang Angles (10 to 70 degrees from vertical)\\nmodule overhangs() {\\n    angles = [10, 20, 30, 45, 60, 70];\\n    for (i = [0:len(angles)-1]) {\\n        translate([10 + i*13, 5, base_h]) {\\n            // Support block\\n            cube([5, 10, 5]);\\n            // Angled part\\n            translate([0, 0, 5])\\n            rotate([0, -angles[i], 0])\\n                cube([2, 10, 15]);\\n        }\\n    }\\n}\\n\\n// Assemble the model\\ndifference() {\\n    base();\\n    holes();\\n}\\npins();\\n//thin_walls(); // Thin walls moved slightly to avoid overlap\\n// Actually, let's rearrange for better fit.\\n\\ntranslate([0,0,0]) {\\n    // We already have holes and pins in fixed positions.\\n    // Let's ensure no collisions.\\n}\\n\\n// Overhangs on the left front\\noverhang_angles = [10, 20, 30, 45, 60, 70];\\nfor (i = [0:len(overhang_angles)-1]) {\\n    translate([5, 10 + i*10, base_h]) {\\n        cube([5, 5, 2]); // Anchor\\n        rotate([0, -overhang_angles[i], 0])\\n            cube([15, 5, 2]);\\n    }\\n}\\n\\n// Re-doing the layout for clarity\\nunion() {\\n    difference() {\\n        cube([110, 110, 3]); // New Base\\n        // Holes 1-10mm\\n        for(i=[1:10]) {\\n            translate([10 + (i-1)*10, 10, -1]) cylinder(h=5, d=i);\\n        }\\n    }\\n    \\n    // Pins 1-10mm\\n    for(i=[1:10]) {\\n        translate([10 + (i-1)*10, 25, 3]) cylinder(h=1 + (i%5), d=i);\\n    }\\n    \\n    // Thin walls 0.2 -> 2.0\\n    walls = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.6, 2.0];\\n    for(i=[0:len(walls)-1]) {\\n        translate([10 + i*12, 40, 3]) cube([8, walls[i], 10]);\\n    }\\n    \\n    // Bridges 5, 10, 20, 30, 40, 50\\n    bridges = [5, 10, 20, 30, 40, 50];\\n    for(i=[0:len(bridges)-1]) {\\n        y_off = 60 + i*7;\\n        translate([10, y_off, 3]) cube([4, 4, 15]); // Pillar 1\\n        translate([10 + bridges[i] + 4, y_off, 3]) cube([4, 4, 15]); // Pillar 2\\n        translate([10, y_off, 18]) cube([bridges[i] + 8, 4, 2]); // Bridge\\n    }\\n    \\n    // Overhangs 10, 20, 30, 45, 60, 70\\n    o_angles = [10, 20, 30, 45, 60, 70];\\n    for(i=[0:len(o_angles)-1]) {\\n        translate([70, 10 + i*12, 3]) {\\n            cube([10, 5, 5]); // Anchor\\n            translate([10, 0, 5])\\n            rotate([0, -o_angles[i], 0])\\n                cube([20, 5, 2]);\\n        }\\n    }\\n}\\n\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_write_scad_YZBDzRb3fFBoOLgvcINL",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_render_overview_vMhqDGLucmJTirLrJJDd",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_render_overview_vMhqDGLucmJTirLrJJDd",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_write_scad_J0L2BJHLs3nmkT1wB6Fa",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': \"// 3D Printer Torture Test\\n// Optimized layout for evaluation\\n\\n$fn = 32;\\n\\nmodule torture_test() {\\n    base_size_x = 110;\\n    base_size_y = 100;\\n    base_h = 3;\\n\\n    difference() {\\n        // Base plate\\n        union() {\\n            cube([base_size_x, base_size_y, base_h]);\\n            \\n            // --- 2. Circular Pins (1mm to 10mm wide, 1-5mm height) ---\\n            for(i=[1:10]) {\\n                h_val = ((i-1) % 5) + 1;\\n                translate([10 + (i-1)*10, 25, base_h]) \\n                    cylinder(h=h_val, d=i);\\n            }\\n            \\n            // --- 3. Thin Walls (0.2mm to 2.0mm) ---\\n            walls = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.6, 2.0];\\n            for(i=[0:len(walls)-1]) {\\n                translate([10 + i*13, 40, base_h]) \\n                    cube([10, walls[i], 10]);\\n            }\\n            \\n            // --- 4. Bridges (5mm to 50mm) ---\\n            bridges = [5, 10, 15, 20, 30, 40, 50];\\n            for(i=[0:len(bridges)-1]) {\\n                y_off = 55 + i*6;\\n                pillar_w = 4;\\n                translate([10, y_off, base_h]) cube([pillar_w, 4, 15]); // Pillar 1\\n                translate([10 + bridges[i] + pillar_w, y_off, base_h]) cube([pillar_w, 4, 15]); // Pillar 2\\n                translate([10, y_off, base_h + 15]) \\n                    cube([bridges[i] + pillar_w*2, 4, 2]); // Bridge span\\n            }\\n            \\n            // --- 5. Overhang Angles (10-70 degrees from horizontal) ---\\n            // We use the 'standard' overhang test style: angled beams\\n            o_angles = [10, 20, 30, 45, 60, 70];\\n            for(i=[0:len(o_angles)-1]) {\\n                translate([75, 5 + i*12, base_h]) {\\n                    cube([8, 6, 8]); // Foundation\\n                    translate([8, 0, 8])\\n                    rotate([0, -o_angles[i], 0])\\n                        cube([25, 6, 2]); // Overhang beam\\n                }\\n            }\\n        }\\n        \\n        // --- 1. Grid of Holes (1mm to 10mm) ---\\n        // Subtracted from base\\n        for(i=[1:10]) {\\n            translate([10 + (i-1)*10, 10, -1]) \\n                cylinder(h=base_h + 2, d=i);\\n        }\\n    }\\n    \\n    // Labels (Optional but good for 3D models - simplified as blocks if text not used)\\n    // To keep it clean and fast to render, I won't use the 'text' module which can be slow.\\n}\\n\\ntorture_test();\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_write_scad_J0L2BJHLs3nmkT1wB6Fa",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_render_overview_of5x4mZQctM5VB58g15F",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_render_overview_of5x4mZQctM5VB58g15F",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_render_png_OuFpBhyixgoBG8aoZlfX",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'elevation': 45, 'azimuth': 45, 'distance': 250}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_render_png_OuFpBhyixgoBG8aoZlfX",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_write_scad_k43hurtFhVxZhq5lGSsk",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// 3D Printer Torture Test\\n// Features: \\n// - Hole diameters: 1 to 10mm\\n// - Pin diameters: 1 to 10mm (heights 1 to 5mm)\\n// - Thin walls: 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.6, 2.0 mm\\n// - Bridges: 5, 10, 15, 20, 30, 40, 50 mm\\n// - Overhangs: 10, 20, 30, 45, 60, 70 degrees (from vertical)\\n\\n$fn = 32;\\n\\nmodule torture_test() {\\n    base_size_x = 110;\\n    base_size_y = 100;\\n    base_h = 3;\\n\\n    difference() {\\n        union() {\\n            // Base plate\\n            cube([base_size_x, base_size_y, base_h]);\\n            \\n            // --- Circular Pins (1mm to 10mm wide, 1-5mm height) ---\\n            for(i=[1:10]) {\\n                h_val = ((i-1) % 5) + 1;\\n                translate([10 + (i-1)*10, 25, base_h]) \\n                    cylinder(h=h_val, d=i);\\n            }\\n            \\n            // --- Thin Walls (0.2mm to 2.0mm) ---\\n            walls = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.6, 2.0];\\n            for(i=[0:len(walls)-1]) {\\n                translate([10 + i*13, 40, base_h]) \\n                    cube([10, walls[i], 10]);\\n            }\\n            \\n            // --- Bridges (5mm to 50mm) ---\\n            bridges = [5, 10, 15, 20, 30, 40, 50];\\n            for(i=[0:len(bridges)-1]) {\\n                y_off = 55 + i*6;\\n                pillar_w = 4;\\n                translate([10, y_off, base_h]) cube([pillar_w, 4, 15]); // Pillar 1\\n                translate([10 + bridges[i] + pillar_w, y_off, base_h]) cube([pillar_w, 4, 15]); // Pillar 2\\n                translate([10, y_off, base_h + 15]) \\n                    cube([bridges[i] + pillar_w*2, 4, 2]); // Bridge span\\n            }\\n            \\n            // --- Overhang Angles (10-70 degrees from vertical) ---\\n            o_angles = [10, 20, 30, 45, 60, 70];\\n            for(i=[0:len(o_angles)-1]) {\\n                translate([85, 10 + i*13, base_h]) {\\n                    cube([6, 8, 8]); // Foundation\\n                    translate([0, 0, 8])\\n                    rotate([0, o_angles[i], 0])\\n                        mirror([1,0,0]) cube([20, 8, 2]); // Overhang beam\\n                }\\n            }\\n        }\\n        \\n        // --- Grid of Holes (1mm to 10mm) ---\\n        // Subtracted from base\\n        for(i=[1:10]) {\\n            translate([10 + (i-1)*10, 10, -1]) \\n                cylinder(h=base_h + 2, d=i);\\n        }\\n    }\\n}\\n\\ntorture_test();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_write_scad_k43hurtFhVxZhq5lGSsk",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_render_overview_Gd7mVaGkhUHXRzNuTVS9",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_render_overview_Gd7mVaGkhUHXRzNuTVS9",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "tool_submit_txqYJDkbbXOEGK4tRbeJ",
+        "type": "function",
+        "function": {
+          "name": "submit",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "tool_submit_txqYJDkbbXOEGK4tRbeJ",
+    "content": "{\"success\": true, \"message\": \"Solution submitted\"}"
+  }
+]

@@ -1,0 +1,164 @@
+[
+  {
+    "role": "system",
+    "content": "You are an expert OpenSCAD programmer. Your task is to create a 3D model based on the\nuser's description.\n\nYou have access to the following tools:\n\n- write_scad(content): Write OpenSCAD code to the model file. Returns syntax errors if\n  any. Always provide the complete file contents\u2014this overwrites the previous version.\n\n- render_png(distance, azimuth, elevation): Render the current model from a specific\n  camera angle. Returns a PNG image.\n  - distance: Camera distance from origin (try 200-500 for typical models)\n  - azimuth: Horizontal angle in degrees (0=front, 90=right, 180=back, 270=left)\n  - elevation: Vertical angle in degrees (0=horizon, 90=top-down)\n\n- render_overview(): Render four standard views (front, back, top, isometric) as a\n  single composite image. Use this to quickly check your model from all angles.\n\n- submit(): Call this when you are satisfied with your model.\n\n## Guidelines\n\n1. Start by writing an initial version of the model, then render it to see the result.\n2. Iterate: refine the code, re-render, until satisfied.\n3. Use render_overview() periodically to verify the model looks correct from all angles.\n4. OpenSCAD uses millimeters as the default unit.\n5. When you believe the model meets the requirements, call submit().\n\nCommon OpenSCAD patterns:\n- Difference for subtracting shapes: difference() { base(); cutout(); }\n- Union for combining: union() { part1(); part2(); }\n- Linear extrude for 2D\u21923D: linear_extrude(height) square([x,y]);\n- Translate/rotate for positioning: translate([x,y,z]) rotate([rx,ry,rz]) shape();\n"
+  },
+  {
+    "role": "user",
+    "content": "Design a 3D printer torture test model. It should print as a single piece and\ninclude these features to test various aspects of 3D printer performance:\n\n * a grid of holes from 1-10mm\n * a grid of circular pins from 1-10mm, with 1-5mm of height\n * thin walls between 0.2-2mm\n * bridges of 5-50mm in length\n * overhang angles between 10-70 degrees\n\nThe model should be reasonably compact to facilitate quick printing. Use judgement\nto figure out how many of each feature to include, and how to arrange them in a way\nthat allows for easy measurement and evaluation after printing."
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_DfDCmGyi6O4ZBX0gtiIy5t5K",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '$fn = 64;\\n\\nmodule base_plate() {\\n    cube([180, 140, 4], center = false);\\n}\\n\\nmodule hole_grid() {\\n    // Grid of holes from 1-10mm diameter (2 rows of 5)\\n    for (row = [0, 1]) {\\n        for (col = [0 : 4]) {\\n            diam = row * 5 + col + 1;\\n            x = 12 + col * 12;\\n            y = 12 + row * 18;\\n            translate([x, y, -1])\\n                cylinder(h = 6, d = diam, center = false);\\n        }\\n    }\\n}\\n\\nmodule pin_grid() {\\n    // Circular pins with diameters from 1-9mm and heights from 1-5mm\\n    for (row = [0 : 4]) {\\n        for (col = [0 : 4]) {\\n            diam = 1 + col * 2;\\n            height = 1 + row;\\n            translate([90 + col * 12, 12 + row * 10, 4])\\n                cylinder(h = height, d = diam, center = false);\\n        }\\n    }\\n}\\n\\nmodule thin_wall_array() {\\n    thicknesses = [0.2, 0.6, 1.0, 1.4, 1.8, 2.0];\\n    x = 10;\\n    for (t = thicknesses) {\\n        translate([x, 55, 4])\\n            cube([t, 30, 25], center = false);\\n        x += t + 4;\\n    }\\n}\\n\\nmodule bridge_tests() {\\n    lengths = [5, 15, 25, 35, 45, 50];\\n    base_x = 100;\\n    bridge_spacing = 8;\\n    post_width = 5;\\n    post_depth = 12;\\n    post_height = 12;\\n    beam_thickness = 2;\\n\\n    for (i = [0 : len(lengths) - 1]) {\\n        len_bridge = lengths[i];\\n        y = 80 + i * bridge_spacing;\\n        // support posts\\n        translate([base_x, y, 4])\\n            cube([post_width, post_depth, post_height], center = false);\\n        translate([base_x + post_width + len_bridge, y, 4])\\n            cube([post_width, post_depth, post_height], center = false);\\n        // bridging beam\\n        translate([base_x + post_width, y + 2, 4 + post_height - beam_thickness])\\n            cube([len_bridge, post_depth - 4, beam_thickness], center = false);\\n    }\\n}\\n\\nmodule overhang_prism(len_angle, height, depth) {\\n    polyhedron(\\n        points = [\\n            [0, 0, 4],\\n            [len_angle, 0, 4],\\n            [0, 0, 4 + height],\\n            [0, depth, 4],\\n            [len_angle, depth, 4],\\n            [0, depth, 4 + height]\\n        ],\\n        faces = [\\n            [0, 1, 2],\\n            [3, 5, 4],\\n            [0, 3, 4, 1],\\n            [1, 4, 5, 2],\\n            [2, 5, 3, 0]\\n        ]\\n    );\\n}\\n\\nmodule overhang_array() {\\n    angles = [10, 20, 30, 40, 50, 60, 70];\\n    start_x = 5;\\n    height = 10;\\n    depth = 25;\\n    translate([0, 115, 0]) {\\n        for (angle = angles) {\\n            length = height / tan(angle * PI / 180);\\n            translate([start_x, 0, 0])\\n                overhang_prism(length, height, depth);\\n            start_x += length + 5;\\n        }\\n    }\\n}\\n\\nmodule torture_test() {\\n    difference() {\\n        union() {\\n            base_plate();\\n            pin_grid();\\n            thin_wall_array();\\n            bridge_tests();\\n            overhang_array();\\n        }\\n        hole_grid();\\n    }\\n}\\n\\n\\ntorture_test();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_DfDCmGyi6O4ZBX0gtiIy5t5K",
+    "content": "{\"success\": false, \"error\": \"\"}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_U5LwA3SC2YetkkVigchVVyba",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '$fn = 64;\\n\\nmodule base_plate() {\\n    cube([180, 140, 4], center = false);\\n}\\n\\nmodule hole_grid() {\\n    // Grid of holes from 1-10mm diameter (2 rows of 5)\\n    for (row = [0, 1]) {\\n        for (col = [0 : 4]) {\\n            diam = row * 5 + col + 1;\\n            x = 12 + col * 12;\\n            y = 12 + row * 18;\\n            translate([x, y, -1])\\n                cylinder(h = 6, d = diam, center = false);\\n        }\\n    }\\n}\\n\\nmodule pin_grid() {\\n    // Circular pins with diameters from 1-9mm and heights from 1-5mm\\n    for (row = [0 : 4]) {\\n        for (col = [0 : 4]) {\\n            diam = 1 + col * 2;\\n            height = 1 + row;\\n            translate([90 + col * 12, 12 + row * 10, 4])\\n                cylinder(h = height, d = diam, center = false);\\n        }\\n    }\\n}\\n\\nmodule thin_wall_array() {\\n    thicknesses = [0.2, 0.6, 1.0, 1.4, 1.8, 2.0];\\n    x = 10;\\n    for (t = thicknesses) {\\n        translate([x, 55, 4])\\n            cube([t, 30, 25], center = false);\\n        x += t + 4;\\n    }\\n}\\n\\nmodule bridge_tests() {\\n    lengths = [5, 15, 25, 35, 45, 50];\\n    base_x = 100;\\n    bridge_spacing = 8;\\n    post_width = 5;\\n    post_depth = 12;\\n    post_height = 12;\\n    beam_thickness = 2;\\n\\n    for (i = [0 : len(lengths) - 1]) {\\n        len_bridge = lengths[i];\\n        y = 80 + i * bridge_spacing;\\n        // support posts\\n        translate([base_x, y, 4])\\n            cube([post_width, post_depth, post_height], center = false);\\n        translate([base_x + post_width + len_bridge, y, 4])\\n            cube([post_width, post_depth, post_height], center = false);\\n        // bridging beam\\n        translate([base_x + post_width, y + 2, 4 + post_height - beam_thickness])\\n            cube([len_bridge, post_depth - 4, beam_thickness], center = false);\\n    }\\n}\\n\\nmodule overhang_prism(len_angle, height, depth) {\\n    polyhedron(\\n        points = [\\n            [0, 0, 4],\\n            [len_angle, 0, 4],\\n            [0, 0, 4 + height],\\n            [0, depth, 4],\\n            [len_angle, depth, 4],\\n            [0, depth, 4 + height]\\n        ],\\n        faces = [\\n            [0, 1, 2],\\n            [3, 5, 4],\\n            [0, 3, 4, 1],\\n            [1, 4, 5, 2],\\n            [2, 5, 3, 0]\\n        ]\\n    );\\n}\\n\\nmodule overhang_array() {\\n    angles = [10, 20, 30, 40, 50, 60, 70];\\n    start_x = 5;\\n    height = 10;\\n    depth = 25;\\n    translate([0, 115, 0]) {\\n        for (angle = angles) {\\n            length = height / tan(angle * PI / 180);\\n            translate([start_x, 0, 0])\\n                overhang_prism(length, height, depth);\\n            start_x += length + 5;\\n        }\\n    }\\n}\\n\\nmodule torture_test() {\\n    difference() {\\n        union() {\\n            base_plate();\\n            pin_grid();\\n            thin_wall_array();\\n            bridge_tests();\\n            overhang_array();\\n        }\\n        hole_grid();\\n    }\\n}\\n\\n\\ntorture_test();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_U5LwA3SC2YetkkVigchVVyba",
+    "content": "{\"success\": false, \"error\": \"\"}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_SM2vO0qVh2cYSHiNzVozZXjE",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '$fn = 64;\\n\\nmodule base_plate() {\\n    cube([180, 140, 4], center = false);\\n}\\n\\nmodule hole_grid() {\\n    // Grid of holes from 1-10mm diameter (2 rows of 5)\\n    for (row = [0, 1]) {\\n        for (col = [0 : 4]) {\\n            diam = row * 5 + col + 1;\\n            x = 12 + col * 12;\\n            y = 12 + row * 18;\\n            translate([x, y, -1])\\n                cylinder(h = 6, d = diam, center = false);\\n        }\\n    }\\n}\\n\\nmodule pin_grid() {\\n    // Circular pins with diameters from 1-9mm and heights from 1-5mm\\n    for (row = [0 : 4]) {\\n        for (col = [0 : 4]) {\\n            diam = 1 + col * 2;\\n            height = 1 + row;\\n            translate([90 + col * 12, 12 + row * 10, 4])\\n                cylinder(h = height, d = diam, center = false);\\n        }\\n    }\\n}\\n\\nmodule thin_wall_array() {\\n    thicknesses = [0.2, 0.6, 1.0, 1.4, 1.8, 2.0];\\n    for (i = [0 : 5]) {\\n        thickness = thicknesses[i];\\n        preceding = [for (j = [0 : i - 1]) thicknesses[j] + 4];\\n        x_offset = 10 + sum(preceding);\\n        translate([x_offset, 35, 4])\\n            cube([thickness, 30, 25], center = false);\\n    }\\n}\\n\\nmodule bridge_tests() {\\n    lengths = [5, 15, 25, 35, 45, 50];\\n    base_x = 100;\\n    bridge_spacing = 8;\\n    post_width = 5;\\n    post_depth = 12;\\n    post_height = 12;\\n    beam_thickness = 2;\\n\\n    for (i = [0 : 5]) {\\n        len_bridge = lengths[i];\\n        y = 70 + i * bridge_spacing;\\n        translate([base_x, y, 4])\\n            cube([post_width, post_depth, post_height], center = false);\\n        translate([base_x + post_width + len_bridge, y, 4])\\n            cube([post_width, post_depth, post_height], center = false);\\n        translate([base_x + post_width, y + 2, 4 + post_height - beam_thickness])\\n            cube([len_bridge, post_depth - 4, beam_thickness], center = false);\\n    }\\n}\\n\\nmodule overhang_prism(len_angle, height, depth) {\\n    polyhedron(\\n        points = [\\n            [0, 0, 4],\\n            [len_angle, 0, 4],\\n            [0, 0, 4 + height],\\n            [0, depth, 4],\\n            [len_angle, depth, 4],\\n            [0, depth, 4 + height]\\n        ],\\n        faces = [\\n            [0, 1, 2],\\n            [3, 5, 4],\\n            [0, 3, 4, 1],\\n            [1, 4, 5, 2],\\n            [2, 5, 3, 0]\\n        ]\\n    );\\n}\\n\\nmodule overhang_array() {\\n    angles = [10, 20, 30, 40, 50, 60, 70];\\n    height = 10;\\n    depth = 25;\\n    for (idx = [0 : 6]) {\\n        angle = angles[idx];\\n        length = height / tan(angle * PI / 180);\\n        preceding_lengths = [for (j = [0 : idx - 1]) height / tan(angles[j] * PI / 180)];\\n        x_offset = 5 + sum(preceding_lengths) + idx * 5;\\n        translate([x_offset, 115, 0])\\n            overhang_prism(length, height, depth);\\n    }\\n}\\n\\nmodule torture_test() {\\n    difference() {\\n        union() {\\n            base_plate();\\n            pin_grid();\\n            thin_wall_array();\\n            bridge_tests();\\n            overhang_array();\\n        }\\n        hole_grid();\\n    }\\n}\\n\\n\\ntorture_test();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_SM2vO0qVh2cYSHiNzVozZXjE",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_MFINAuZmyry1MT6hcXdiu2s4",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_MFINAuZmyry1MT6hcXdiu2s4",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_k4qBAvyQ2gHOZRYFy26h0R3h",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '$fn = 64;\\n\\nmodule base_plate() {\\n    cube([180, 140, 4], center = false);\\n}\\n\\nmodule hole_grid() {\\n    // Grid of holes from 1-10mm diameter (2 rows of 5)\\n    for (row = [0, 1]) {\\n        for (col = [0 : 4]) {\\n            diam = row * 5 + col + 1;\\n            x = 12 + col * 12;\\n            y = 12 + row * 18;\\n            translate([x, y, -1])\\n                cylinder(h = 6, d = diam, center = false);\\n        }\\n    }\\n}\\n\\nmodule pin_grid() {\\n    // Circular pins with diameters from 1-10mm and heights from 1-5mm\\n    diam_rows = [\\n        [1, 2, 3, 4, 5],\\n        [6, 7, 8, 9, 10]\\n    ];\\n    for (row = [0, 1]) {\\n        for (col = [0 : 4]) {\\n            diam = diam_rows[row][col];\\n            height = 1 + col;\\n            translate([90 + col * 12, 10 + row * 18, 4])\\n                cylinder(h = height, d = diam, center = false);\\n        }\\n    }\\n}\\n\\nmodule thin_wall_array() {\\n    thicknesses = [0.2, 0.6, 1.0, 1.4, 1.8, 2.0];\\n    for (i = [0 : 5]) {\\n        thickness = thicknesses[i];\\n        preceding = [for (j = [0 : i - 1]) thicknesses[j] + 4];\\n        x_offset = 10 + sum(preceding);\\n        translate([x_offset, 25, 4])\\n            cube([thickness, 30, 25], center = false);\\n    }\\n}\\n\\nmodule bridge_tests() {\\n    lengths = [5, 15, 25, 35, 45, 50];\\n    base_x = 100;\\n    bridge_spacing = 4;\\n    post_width = 5;\\n    post_depth = 12;\\n    post_height = 12;\\n    beam_thickness = 2;\\n\\n    for (i = [0 : 5]) {\\n        len_bridge = lengths[i];\\n        y = 70 + i * bridge_spacing;\\n        translate([base_x, y, 4])\\n            cube([post_width, post_depth, post_height], center = false);\\n        translate([base_x + post_width + len_bridge, y, 4])\\n            cube([post_width, post_depth, post_height], center = false);\\n        translate([base_x + post_width, y + 2, 4 + post_height - beam_thickness])\\n            cube([len_bridge, post_depth - 4, beam_thickness], center = false);\\n    }\\n}\\n\\nmodule overhang_prism(len_angle, height, depth) {\\n    polyhedron(\\n        points = [\\n            [0, 0, 4],\\n            [len_angle, 0, 4],\\n            [0, 0, 4 + height],\\n            [0, depth, 4],\\n            [len_angle, depth, 4],\\n            [0, depth, 4 + height]\\n        ],\\n        faces = [\\n            [0, 1, 2],\\n            [3, 5, 4],\\n            [0, 3, 4, 1],\\n            [1, 4, 5, 2],\\n            [2, 5, 3, 0]\\n        ]\\n    );\\n}\\n\\nmodule overhang_array() {\\n    angles = [10, 20, 30, 40, 50, 60, 70];\\n    height = 10;\\n    depth = 25;\\n    for (idx = [0 : 6]) {\\n        angle = angles[idx];\\n        length = height / tan(angle * PI / 180);\\n        preceding_lengths = [for (j = [0 : idx - 1]) height / tan(angles[j] * PI / 180)];\\n        x_offset = 5 + sum(preceding_lengths) + idx * 5;\\n        translate([x_offset, 110, 0])\\n            overhang_prism(length, height, depth);\\n    }\\n}\\n\\nmodule torture_test() {\\n    difference() {\\n        union() {\\n            base_plate();\\n            pin_grid();\\n            thin_wall_array();\\n            bridge_tests();\\n            overhang_array();\\n        }\\n        hole_grid();\\n    }\\n}\\n\\n\\ntorture_test();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_k4qBAvyQ2gHOZRYFy26h0R3h",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_KfiL2FzZXF8lSfTuRyHQ7EeV",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_KfiL2FzZXF8lSfTuRyHQ7EeV",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_0glf6mHQH1W1aWUgPuwKx4Kl",
+        "type": "function",
+        "function": {
+          "name": "submit",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0glf6mHQH1W1aWUgPuwKx4Kl",
+    "content": "{\"success\": true, \"message\": \"Solution submitted\"}"
+  }
+]
