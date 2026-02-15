@@ -209,7 +209,7 @@ class AgentExecutor:
     model can use tools to write, render, and iterate on OpenSCAD code.
     """
 
-    def __init__(self, model: str, max_iterations: int = 20):
+    def __init__(self, model: str, max_iterations: int = 50):
         """Initialize the agent executor.
 
         Args:
