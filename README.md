@@ -22,4 +22,6 @@ Each agent gets:
 - `render_overview()` — render front/back/top/isometric as a composite image
 - `submit()` — declare the solution final
 
-The agent loops until it calls `submit()` or hits the iteration limit (20 calls). There is no automated scoring — evaluation is purely visual via the results page.
+The agent loops until it calls `submit()` or hits the iteration limit (20 calls).
+
+**The agentic loop is rather minimal. For example, even syntactically invalid files are accepted should the agent decide to submit them.**
