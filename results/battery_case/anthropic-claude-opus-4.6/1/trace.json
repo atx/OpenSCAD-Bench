@@ -1,0 +1,656 @@
+[
+  {
+    "role": "system",
+    "content": "You are an expert OpenSCAD programmer. Your task is to create a 3D model based on the\nuser's description.\n\nYou have access to the following tools:\n\n- write_scad(content): Write OpenSCAD code to the model file. Returns syntax errors if\n  any. Always provide the complete file contents\u2014this overwrites the previous version.\n\n- render_png(distance, azimuth, elevation): Render the current model from a specific\n  camera angle. Returns a PNG image.\n  - distance: Camera distance from origin (try 200-500 for typical models)\n  - azimuth: Horizontal angle in degrees (0=front, 90=right, 180=back, 270=left)\n  - elevation: Vertical angle in degrees (0=horizon, 90=top-down)\n\n- render_overview(): Render four standard views (front, back, top, isometric) as a\n  single composite image. Use this to quickly check your model from all angles.\n\n- submit(): Call this when you are satisfied with your model.\n\n## Guidelines\n\n1. Start by writing an initial version of the model, then render it to see the result.\n2. Iterate: refine the code, re-render, until satisfied.\n3. Use render_overview() periodically to verify the model looks correct from all angles.\n4. OpenSCAD uses millimeters as the default unit.\n5. When you believe the model meets the requirements, call submit().\n\nCommon OpenSCAD patterns:\n- Difference for subtracting shapes: difference() { base(); cutout(); }\n- Union for combining: union() { part1(); part2(); }\n- Linear extrude for 2D\u21923D: linear_extrude(height) square([x,y]);\n- Translate/rotate for positioning: translate([x,y,z]) rotate([rx,ry,rz]) shape();\n"
+  },
+  {
+    "role": "user",
+    "content": "Create a 3D printable case for holding four Olympus BLS-5 batteries.\n\nThe dimensions of a battery is 56 mm x 36 mm x 13 mm.\n\nThis case should hold the batteries in a linear 4 x 1 arrangement, with the\nbatteries standing 'upright' on their smallest face. They should face each\nother with their largest face.\n\nThe case should be 3D printable in one single piece.\n\nThere should be a 'snap-fit' mechanism to hold the batteries in place,\nwhile allowing easy removal by a finger hole from the bottom of each battery slot."
+  },
+  {
+    "role": "assistant",
+    "content": "\n\nI'll design a 3D printable battery case for four Olympus BLS-5 batteries. Let me start by planning the design:\n\n- Battery: 56mm x 36mm x 13mm\n- Orientation: Standing upright on 13mm x 36mm face, so height = 56mm\n- Linear arrangement: 4 batteries in a row, largest faces (56mm x 36mm) facing each other\n- Features: Snap-fit tabs, finger holes at bottom for removal"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_01C3aCwic6QDuhCnqVq3atmL",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// Olympus BLS-5 Battery Case - Holds 4 batteries in 4x1 linear arrangement\\n// Battery dimensions: 56 x 36 x 13 mm\\n// Orientation: upright on 13x36 face, height=56mm, largest face (56x36) facing neighbors\\n\\n// Battery dimensions\\nbat_w = 36;    // width (X) - this is the face width\\nbat_d = 13;    // depth (Y) - thickness, batteries face each other along Y\\nbat_h = 56;    // height (Z) - standing upright\\n\\n// Tolerances and wall parameters\\ntol = 0.5;        // tolerance around battery\\nwall = 2.5;       // wall thickness\\nfloor_t = 2.5;    // floor thickness\\ndivider_t = 2.0;  // divider thickness between batteries\\n\\n// Slot internal dimensions (with tolerance)\\nslot_w = bat_w + 2*tol;  // 37mm\\nslot_d = bat_d + 2*tol;  // 14mm\\nslot_h = bat_h + 1;      // 57mm (battery sticks up slightly for easy grab)\\n\\n// Snap-fit parameters\\nsnap_width = 10;      // width of snap tab\\nsnap_depth = 1.2;     // how far snap protrudes into slot\\nsnap_height = 3;      // height of snap bump\\nsnap_z = slot_h - 12; // position from bottom (near top of battery)\\nsnap_ramp = 2;        // ramp length above snap for insertion\\n\\n// Finger hole parameters\\nfinger_d = 18;        // finger hole diameter\\nfinger_hole_z = -1;   // starts below floor for clean cut\\n\\n// Number of batteries\\nn_bat = 4;\\n\\n// Overall case dimensions\\ncase_w = slot_w + 2*wall;  // single slot width + walls\\ncase_d = n_bat * slot_d + (n_bat - 1) * divider_t + 2*wall;  // 4 slots + 3 dividers + 2 walls\\ncase_h = slot_h + floor_t; // total height\\n\\n// Corner radius\\ncorner_r = 3;\\n\\necho(\"Case dimensions:\", case_w, case_d, case_h);\\n\\nmodule rounded_box(w, d, h, r) {\\n    translate([r, r, 0])\\n    minkowski() {\\n        cube([w - 2*r, d - 2*r, h/2]);\\n        cylinder(r=r, h=h/2, $fn=32);\\n    }\\n}\\n\\nmodule snap_tab(height_pos) {\\n    // A snap-fit bump that protrudes into the slot\\n    // Shaped like a ramp on top and a ledge on bottom for retention\\n    hull() {\\n        translate([0, 0, height_pos])\\n            cube([snap_width, 0.1, snap_height]);\\n        translate([0, snap_depth, height_pos + snap_height*0.3])\\n            cube([snap_width, 0.1, snap_height*0.4]);\\n    }\\n    // Ramp on top for easy insertion\\n    hull() {\\n        translate([0, snap_depth, height_pos + snap_height*0.7])\\n            cube([snap_width, 0.1, snap_height*0.3]);\\n        translate([0, 0.1, height_pos + snap_height])\\n            cube([snap_width, 0.1, snap_ramp]);\\n    }\\n}\\n\\nmodule battery_case() {\\n    difference() {\\n        // Outer shell with rounded corners\\n        rounded_box(case_w, case_d, case_h, corner_r);\\n        \\n        // Cut out each battery slot\\n        for (i = [0:n_bat-1]) {\\n            slot_y = wall + i * (slot_d + divider_t);\\n            \\n            // Main slot cavity\\n            translate([wall, slot_y, floor_t])\\n                cube([slot_w, slot_d, slot_h + 1]);\\n            \\n            // Finger hole from bottom (through floor)\\n            translate([wall + slot_w/2, slot_y + slot_d/2, finger_hole_z])\\n                cylinder(d=finger_d, h=floor_t + 2, $fn=48);\\n            \\n            // Chamfer at top of slot for easy battery insertion\\n            translate([wall - 0.5, slot_y - 0.5, case_h - 2])\\n                linear_extrude(height=2.5, scale=[1.03, 1.07])\\n                    square([slot_w + 1, slot_d + 1]);\\n        }\\n    }\\n    \\n    // Add snap-fit tabs on the long walls (left and right sides) of each slot\\n    for (i = [0:n_bat-1]) {\\n        slot_y = wall + i * (slot_d + divider_t);\\n        \\n        // Left wall snap tab (protrudes in +X direction into slot)\\n        translate([wall, slot_y + slot_d/2 - snap_width/2, floor_t])\\n            snap_tab(snap_z - floor_t);\\n        \\n        // Right wall snap tab (protrudes in -X direction into slot, mirrored)\\n        translate([wall + slot_w, slot_y + slot_d/2 + snap_width/2, floor_t])\\n            rotate([0, 0, 180])\\n                snap_tab(snap_z - floor_t);\\n    }\\n    \\n    // Add snap-fit tabs on the divider walls and outer walls (Y-direction)\\n    for (i = [0:n_bat-1]) {\\n        slot_y = wall + i * (slot_d + divider_t);\\n        slot_x_center = wall + slot_w/2;\\n        \\n        // Front wall of slot (lower Y side)\\n        translate([slot_x_center - snap_width/2, slot_y, floor_t])\\n            snap_tab(snap_z - floor_t);\\n        \\n        // Back wall of slot (upper Y side, mirrored)\\n        translate([slot_x_center + snap_width/2, slot_y + slot_d, floor_t])\\n            rotate([0, 0, 180])\\n                snap_tab(snap_z - floor_t);\\n    }\\n}\\n\\n// Add subtle grip texture / label area on outside\\nmodule final_case() {\\n    difference() {\\n        battery_case();\\n        \\n        // Add grip grooves on the long sides for aesthetics/grip\\n        for (i = [0:7]) {\\n            // Front side grooves\\n            translate([-0.5, wall + 3 + i*8, floor_t + 10])\\n                rotate([0, 90, 0])\\n                    cylinder(d=1.5, h=1, $fn=16);\\n            // Back side grooves  \\n            translate([case_w - 0.5, wall + 3 + i*8, floor_t + 10])\\n                rotate([0, 90, 0])\\n                    cylinder(d=1.5, h=1, $fn=16);\\n        }\\n    }\\n}\\n\\n// Render the case\\nfinal_case();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_01C3aCwic6QDuhCnqVq3atmL",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_01MpmxZJvRqKgihc2Hv6oMCZ",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_01MpmxZJvRqKgihc2Hv6oMCZ",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "Let me look at the model from different angles to assess the design:"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_01Wx5fKXoSpYeuoAFNHWYR9X",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 250, 'azimuth': 30, 'elevation': 25}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_01Wx5fKXoSpYeuoAFNHWYR9X",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_014KDvio2mkGxRU4FiQVXCxm",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 250, 'azimuth': 180, 'elevation': -20}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_014KDvio2mkGxRU4FiQVXCxm",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "I can see the basic structure. Let me refine the design - I want to improve the snap-fit mechanism, make the finger holes more visible, add better chamfers for insertion, and ensure printability. Let me also add some structural improvements."
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_01XxnwxvbDdepWzDKnyqrMDM",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// Olympus BLS-5 Battery Case - Holds 4 batteries in 4x1 linear arrangement\\n// Battery dimensions: 56 x 36 x 13 mm\\n// Orientation: upright on 13x36 face, height=56mm\\n// Batteries face each other with their largest face (56x36) along Y axis\\n\\n// ===== Parameters =====\\n// Battery dimensions\\nbat_w = 36;    // width (X)\\nbat_d = 13;    // depth (Y) - batteries line up along Y\\nbat_h = 56;    // height (Z) - standing upright\\n\\n// Tolerances and structure\\ntol = 0.5;          // clearance around battery\\nwall = 2.5;         // outer wall thickness\\nfloor_t = 3.0;      // floor thickness\\ndivider_t = 2.0;    // wall between adjacent batteries\\n\\n// Slot internal dimensions\\nslot_w = bat_w + 2*tol;   // 37mm\\nslot_d = bat_d + 2*tol;   // 14mm  \\nslot_h = bat_h - 3;       // 53mm - battery protrudes 3mm above for easy grip\\n\\n// Number of batteries\\nn_bat = 4;\\n\\n// Snap-fit parameters\\nsnap_w = 8;           // width of each snap tab\\nsnap_protrude = 1.0;  // how far it sticks into slot\\nsnap_bump_h = 2.5;    // height of the snap bump\\nsnap_z = slot_h - 8;  // Z position of snap (near top)\\nsnap_flex_h = 15;     // height of flex cantilever behind snap\\nsnap_flex_gap = 0.8;  // gap behind cantilever for flex\\n\\n// Finger hole parameters\\nfinger_d = 16;        // finger hole diameter through floor\\n\\n// Corner radius\\ncorner_r = 3;\\n\\n// Derived overall dimensions\\ncase_w = slot_w + 2*wall;\\ncase_d = n_bat * slot_d + (n_bat-1) * divider_t + 2*wall;\\ncase_h = slot_h + floor_t;\\n\\n$fn = 48;\\n\\necho(str(\"Case size: \", case_w, \" x \", case_d, \" x \", case_h, \" mm\"));\\n\\n// ===== Modules =====\\n\\n// Rounded rectangle extrusion\\nmodule rounded_rect(w, d, h, r) {\\n    linear_extrude(height=h)\\n        offset(r=r)\\n            offset(r=-r)\\n                square([w, d]);\\n}\\n\\n// Snap-fit cantilever tab - prints pointing upward\\n// Origin at base of cantilever on the wall surface\\n// Protrudes in +Y direction\\nmodule snap_cantilever() {\\n    // Thin cantilever beam\\n    cant_thick = 1.2;\\n    \\n    // The cantilever arm (vertical beam with snap bump at top)\\n    // Base attached to wall, free end has the bump\\n    union() {\\n        // Bump/catch - the part that holds the battery\\n        // Ramped on top for insertion, sharp ledge on bottom for retention\\n        translate([0, 0, snap_z]) {\\n            // Sharp retaining ledge (bottom face)\\n            // Ramp shape for easy insertion from top\\n            hull() {\\n                // Base of bump at wall\\n                translate([0, 0, 0])\\n                    cube([snap_w, 0.2, snap_bump_h]);\\n                // Tip of bump protruding into slot\\n                translate([0, snap_protrude, snap_bump_h * 0.4])\\n                    cube([snap_w, 0.2, snap_bump_h * 0.2]);\\n            }\\n            // Upper ramp for insertion\\n            hull() {\\n                translate([0, snap_protrude, snap_bump_h * 0.6])\\n                    cube([snap_w, 0.2, snap_bump_h * 0.1]);\\n                translate([0, 0.2, snap_bump_h])\\n                    cube([snap_w, 0.2, 3]);\\n            }\\n        }\\n    }\\n}\\n\\nmodule battery_case() {\\n    difference() {\\n        // === OUTER SHELL ===\\n        rounded_rect(case_w, case_d, case_h, corner_r);\\n        \\n        // === CUT BATTERY SLOTS ===\\n        for (i = [0:n_bat-1]) {\\n            sy = wall + i * (slot_d + divider_t);\\n            \\n            // Main slot\\n            translate([wall, sy, floor_t])\\n                cube([slot_w, slot_d, slot_h + 10]);\\n            \\n            // Top chamfer/bevel for easy battery insertion\\n            translate([wall - 1, sy - 1, case_h - 3])\\n                linear_extrude(height=3.5, scale=[(slot_w+4)/slot_w, (slot_d+4)/slot_d])\\n                    translate([-(2)/(2*(slot_w+4)/slot_w -1)*0 , 0, 0])\\n                        square([slot_w, slot_d]);\\n            \\n            // Finger access hole through floor\\n            translate([wall + slot_w/2, sy + slot_d/2, -1])\\n                cylinder(d=finger_d, h=floor_t + 2);\\n            \\n            // Finger hole countersink on bottom for nicer feel\\n            translate([wall + slot_w/2, sy + slot_d/2, -1])\\n                cylinder(d1=finger_d + 4, d2=finger_d, h=2);\\n        }\\n        \\n        // === CHAMFER TOP EDGES of outer shell ===\\n        difference() {\\n            translate([-1, -1, case_h - 1.5])\\n                cube([case_w + 2, case_d + 2, 2]);\\n            translate([0, 0, case_h - 1.5])\\n                rounded_rect(case_w, case_d, 2, corner_r);\\n        }\\n    }\\n    \\n    // === SNAP-FIT TABS ===\\n    // Add snap tabs on the two long walls (X-direction walls) of each slot\\n    for (i = [0:n_bat-1]) {\\n        sy = wall + i * (slot_d + divider_t);\\n        cx = wall + slot_w/2;\\n        \\n        // Left side snap (on the wall at X = wall, protruding in +X)\\n        translate([wall, sy + slot_d/2 - snap_w/2, floor_t])\\n            snap_cantilever();\\n        \\n        // Right side snap (on the wall at X = wall+slot_w, protruding in -X)\\n        translate([wall + slot_w, sy + slot_d/2 + snap_w/2, floor_t])\\n            rotate([0, 0, 180])\\n                snap_cantilever();\\n    }\\n    \\n    // Snap tabs on the front/back of each slot (Y walls)\\n    for (i = [0:n_bat-1]) {\\n        sy = wall + i * (slot_d + divider_t);\\n        cx = wall + slot_w/2;\\n        \\n        // Near-side Y wall snap\\n        translate([cx - snap_w/2, sy, floor_t])\\n            snap_cantilever();\\n            \\n        // Far-side Y wall snap  \\n        translate([cx + snap_w/2, sy + slot_d, floor_t])\\n            rotate([0, 0, 180])\\n                snap_cantilever();\\n    }\\n}\\n\\n// ===== Label / visual details =====\\nmodule final_case() {\\n    difference() {\\n        battery_case();\\n        \\n        // Engraved text on front\\n        translate([case_w/2, -0.1, case_h/2])\\n            rotate([90, 0, 0])\\n                linear_extrude(height=1)\\n                    text(\"BLS-5\", size=7, halign=\"center\", valign=\"center\", font=\"Liberation Sans:style=Bold\");\\n        \\n        // Battery number labels near each slot on front\\n        for (i = [0:n_bat-1]) {\\n            sy = wall + i * (slot_d + divider_t) + slot_d/2;\\n            translate([case_w/2, -0.1, case_h - 8])\\n                rotate([90, 0, 0])\\n                    linear_extrude(height=0.8) {\\n                        // small tick mark\\n                    }\\n        }\\n    }\\n}\\n\\nfinal_case();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_01XxnwxvbDdepWzDKnyqrMDM",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_vrtx_018MJUCW22nWzWurLBGWhZkY",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_vrtx_018MJUCW22nWzWurLBGWhZkY",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_01SErqjy8ssmwGZnJDVvZHv7",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 250, 'azimuth': 30, 'elevation': 30}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_01SErqjy8ssmwGZnJDVvZHv7",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_01NmhcPX1LdBPtZ9QpYeemxg",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 250, 'azimuth': 200, 'elevation': -30}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_01NmhcPX1LdBPtZ9QpYeemxg",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "Good progress. I can see the case with slots, snap tabs, finger holes on bottom, and text. Let me refine the top chamfer (it looks a bit odd) and improve overall quality. Let me also look more closely at the snap-fit details."
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_vrtx_012nG8pU4mMRzi4Q4H4BrVat",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 150, 'azimuth': 45, 'elevation': 60}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_vrtx_012nG8pU4mMRzi4Q4H4BrVat",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_vrtx_01Tahc7YjEdRYp2cLycGn9qn",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 100, 'azimuth': 0, 'elevation': 15}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_vrtx_01Tahc7YjEdRYp2cLycGn9qn",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "I can see the snap tabs inside the slots and the chamfered top edges. Let me now improve the design with better snap-fit geometry, cleaner chamfers, and a more polished look."
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_01EA5GX5xyLpHCCpRUV4Hrat",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// Olympus BLS-5 Battery Case - Holds 4 batteries in 4x1 linear arrangement\\n// Battery: 56 x 36 x 13 mm\\n// Standing upright on 13x36mm face, largest faces (56x36) facing each other\\n// Printable in one piece, snap-fit retention, finger holes for removal\\n\\n// ===== Parameters =====\\nbat_w = 36;    // battery width (X direction)\\nbat_d = 13;    // battery depth (Y direction) - line up along Y\\nbat_h = 56;    // battery height (Z direction) - standing up\\n\\ntol = 0.5;          // clearance per side\\nwall = 2.5;         // outer wall thickness  \\nfloor_t = 3.0;      // floor thickness\\ndivider_t = 2.0;    // divider between slots\\n\\nslot_w = bat_w + 2*tol;   // 37\\nslot_d = bat_d + 2*tol;   // 14\\nexpose = 8;                // how much battery sticks above case for grip\\nslot_h = bat_h - expose;   // 48mm internal height\\n\\nn_bat = 4;\\n\\n// Snap-fit\\nsnap_w = 8;\\nsnap_protrude = 1.0;\\nsnap_bump_h = 2.5;\\nsnap_z_from_top = 6;  // distance from top of slot wall\\n\\n// Finger hole\\nfinger_d = 16;\\n\\n// Corner radius\\ncorner_r = 3;\\n\\n// Overall case\\ncase_w = slot_w + 2*wall;     // 42\\ncase_d = n_bat*slot_d + (n_bat-1)*divider_t + 2*wall;  // 4*14 + 3*2 + 5 = 67\\ncase_h = slot_h + floor_t;    // 51\\n\\n$fn = 48;\\n\\necho(str(\"Case: \", case_w, \" x \", case_d, \" x \", case_h, \" mm\"));\\n\\n// ===== Modules =====\\n\\nmodule rcube(size, r) {\\n    // Rounded cube with radius on vertical edges\\n    hull() {\\n        for (x = [r, size[0]-r])\\n            for (y = [r, size[1]-r])\\n                translate([x, y, 0])\\n                    cylinder(r=r, h=size[2]);\\n    }\\n}\\n\\n// Snap bump: sits on wall, protrudes into slot\\n// Origin at wall surface, extends in +Y, centered in X on snap_w\\nmodule snap_bump() {\\n    sz = snap_z_from_top;\\n    z_pos = slot_h - sz - snap_bump_h;\\n    \\n    translate([0, 0, z_pos]) {\\n        // Lower retention shelf - steeper angle for positive lock\\n        hull() {\\n            cube([snap_w, 0.01, snap_bump_h*0.35]);\\n            translate([0, snap_protrude, snap_bump_h*0.35])\\n                cube([snap_w, 0.01, 0.01]);\\n        }\\n        // Upper ramp for easy push-in insertion\\n        hull() {\\n            translate([0, snap_protrude, snap_bump_h*0.35])\\n                cube([snap_w, 0.01, 0.01]);\\n            translate([0, 0.01, snap_bump_h])\\n                cube([snap_w, 0.01, 0.01]);\\n        }\\n        // Smooth transition above bump\\n        hull() {\\n            translate([0, 0.01, snap_bump_h])\\n                cube([snap_w, 0.01, 0.01]);\\n            translate([0, 0, snap_bump_h + 2])\\n                cube([snap_w, 0.01, 0.01]);\\n        }\\n    }\\n}\\n\\n// Slot Y position\\nfunction slot_y(i) = wall + i * (slot_d + divider_t);\\n\\nmodule case_body() {\\n    difference() {\\n        // Outer shell\\n        rcube([case_w, case_d, case_h], corner_r);\\n        \\n        for (i = [0:n_bat-1]) {\\n            sy = slot_y(i);\\n            \\n            // Battery slot cavity\\n            translate([wall, sy, floor_t])\\n                cube([slot_w, slot_d, slot_h + 1]);\\n            \\n            // Top insertion chamfer - flare out the top 3mm\\n            translate([wall, sy, 0])\\n            hull() {\\n                // At case_h - 3, match slot size\\n                translate([0, 0, case_h - 3])\\n                    cube([slot_w, slot_d, 0.01]);\\n                // At case_h, slightly wider\\n                translate([-1.5, -1, case_h])\\n                    cube([slot_w + 3, slot_d + 2, 0.01]);\\n            }\\n            \\n            // Finger hole through floor\\n            translate([wall + slot_w/2, sy + slot_d/2, -1])\\n                cylinder(d=finger_d, h=floor_t + 2);\\n            \\n            // Chamfer finger hole on bottom surface for comfort\\n            translate([wall + slot_w/2, sy + slot_d/2, 0])\\n                rotate([180, 0, 0])\\n                    cylinder(d1=finger_d, d2=finger_d+3, h=1.5);\\n        }\\n        \\n        // Outer top edge chamfer (cosmetic)\\n        translate([0, 0, case_h])\\n        difference() {\\n            translate([-1, -1, -2])\\n                cube([case_w+2, case_d+2, 2.5]);\\n            // Keep the inner rounded shape\\n            translate([0, 0, -2])\\n                rcube([case_w, case_d, 2.5], corner_r - 0.5);\\n            // Chamfer\\n            hull() {\\n                translate([0, 0, -2])\\n                    rcube([case_w, case_d, 0.01], corner_r);\\n                translate([0, 0, 0])\\n                    rcube([case_w-1.5, case_d-1.5, 0.01], corner_r);\\n            }\\n        }\\n    }\\n}\\n\\nmodule snap_tabs() {\\n    for (i = [0:n_bat-1]) {\\n        sy = slot_y(i);\\n        \\n        // Snaps on X walls (left and right of each slot)\\n        // Left wall (+X direction)\\n        translate([wall, sy + (slot_d - snap_w)/2, floor_t])\\n            snap_bump();\\n        \\n        // Right wall (-X direction, mirrored)\\n        translate([wall + slot_w, sy + (slot_d + snap_w)/2, floor_t])\\n            rotate([0, 0, 180])\\n                snap_bump();\\n    }\\n}\\n\\nmodule divider_relief() {\\n    // Add slight relief cuts in dividers so they can flex slightly\\n    // This helps snap-fit work better with the Y-direction snaps\\n    for (i = [0:n_bat-2]) {\\n        dy = wall + (i+1)*slot_d + i*divider_t + divider_t/2;\\n        // Relief slot in center of divider\\n        translate([wall + slot_w*0.2, dy - 0.3, floor_t + slot_h*0.5])\\n            cube([slot_w*0.6, 0.6, slot_h*0.5 + 1]);\\n    }\\n}\\n\\nmodule engraved_text() {\\n    // \"BLS-5\" on front face\\n    translate([case_w/2, 0.5, case_h*0.4])\\n        rotate([90, 0, 0])\\n            linear_extrude(height=1)\\n                text(\"BLS-5\", size=6, halign=\"center\", valign=\"center\",\\n                     font=\"Liberation Sans:style=Bold\");\\n    \\n    // \"\u00d74\" \\n    translate([case_w/2, 0.5, case_h*0.4 - 10])\\n        rotate([90, 0, 0])\\n            linear_extrude(height=1)\\n                text(\"\u00d74\", size=5, halign=\"center\", valign=\"center\",\\n                     font=\"Liberation Sans\");\\n    \\n    // Slot numbers on front edge\\n    for (i = [0:n_bat-1]) {\\n        sy = slot_y(i) + slot_d/2;\\n        translate([0.5, sy, case_h - 1])\\n            rotate([0, -90, 0])\\n                rotate([0, 0, 90])\\n                    linear_extrude(height=0.8)\\n                        text(str(i+1), size=4, halign=\"center\", valign=\"center\",\\n                             font=\"Liberation Sans\");\\n    }\\n}\\n\\n// ===== Assembly =====\\nmodule final_case() {\\n    difference() {\\n        union() {\\n            case_body();\\n            snap_tabs();\\n        }\\n        engraved_text();\\n        //divider_relief();  // optional\\n    }\\n}\\n\\nfinal_case();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_01EA5GX5xyLpHCCpRUV4Hrat",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_014SYcRiK5ASfMktDfJBJ2Jv",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_014SYcRiK5ASfMktDfJBJ2Jv",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_01LnGAyHAMVQs71fEJzr3zQ6",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 220, 'azimuth': 25, 'elevation': 35}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_01LnGAyHAMVQs71fEJzr3zQ6",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_0126HEHKZmBt8RGz4DBebGGZ",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 220, 'azimuth': 210, 'elevation': -25}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_0126HEHKZmBt8RGz4DBebGGZ",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "The case looks good! I can see:\n- 4 battery slots in a row\n- Finger holes on the bottom\n- Snap-fit bumps inside the slots\n- Chamfered top edges for easy insertion\n- Text engraving on the front\n\nLet me look closer at the interior and check the snap tabs:"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_vrtx_0134FKHGPo6xV9QJ7ukNWygh",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 120, 'azimuth': 45, 'elevation': 70}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_vrtx_0134FKHGPo6xV9QJ7ukNWygh",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_vrtx_013PSAzwSf7Kd3RoVrtTv7x9",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 180, 'azimuth': 0, 'elevation': 10}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_vrtx_013PSAzwSf7Kd3RoVrtTv7x9",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "The snap tabs are visible inside the slots. Let me improve a few things: the outer chamfer at the top looks a little rough, and I want to add small ribs on the bottom for grip and slightly adjust the cosmetics. Let me also verify the bottom view with finger holes:"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_vrtx_012VijYiFbcjMVYMgYTCsQaP",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 200, 'azimuth': 0, 'elevation': -90}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_vrtx_012VijYiFbcjMVYMgYTCsQaP",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "I can see four finger holes on the bottom. Let me do a final cleanup of the design, removing the slightly problematic outer chamfer and making it cleaner:"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_01NdpT8o9n3LusX8UQrW7T9w",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// Olympus BLS-5 Battery Case - 4x1 Linear Arrangement\\n// Battery: 56 x 36 x 13 mm\\n// Upright on 13x36mm face, largest faces (56x36) facing each other\\n// One-piece 3D printable, snap-fit retention, finger holes for removal\\n\\n// ===== Parameters =====\\nbat_w = 36;    // width (X)\\nbat_d = 13;    // depth (Y) - batteries lined up along Y\\nbat_h = 56;    // height (Z) - standing upright\\n\\ntol = 0.5;\\nwall = 2.5;\\nfloor_t = 3.0;\\ndivider_t = 2.0;\\n\\nslot_w = bat_w + 2*tol;     // 37\\nslot_d = bat_d + 2*tol;     // 14\\nexpose = 10;                 // battery protrudes above case\\nslot_h = bat_h - expose;    // 46mm internal\\n\\nn_bat = 4;\\n\\n// Snap-fit\\nsnap_w = 10;\\nsnap_protrude = 1.0;\\nsnap_bump_h = 2.5;\\nsnap_from_top = 4;  // how far below top of wall the snap sits\\n\\n// Finger hole\\nfinger_d = 16;\\n\\ncorner_r = 3;\\n\\n// Overall\\ncase_w = slot_w + 2*wall;\\ncase_d = n_bat*slot_d + (n_bat-1)*divider_t + 2*wall;\\ncase_h = slot_h + floor_t;\\n\\n$fn = 48;\\n\\necho(str(\"Case: \", case_w, \"x\", case_d, \"x\", case_h, \" mm\"));\\n\\n// ===== Helpers =====\\nmodule rcube(size, r) {\\n    hull() {\\n        for (x=[r, size[0]-r], y=[r, size[1]-r])\\n            translate([x, y, 0])\\n                cylinder(r=r, h=size[2]);\\n    }\\n}\\n\\nfunction slot_y(i) = wall + i*(slot_d + divider_t);\\n\\n// Snap bump on wall surface, protrudes in +Y\\nmodule snap_bump(z_base) {\\n    z = z_base;\\n    // Retention ledge (sharper bottom face)\\n    hull() {\\n        translate([0, 0, z])\\n            cube([snap_w, 0.01, snap_bump_h*0.3]);\\n        translate([0, snap_protrude, z + snap_bump_h*0.3])\\n            cube([snap_w, 0.01, 0.01]);\\n    }\\n    // Ramp (gentler top face for push-in)\\n    hull() {\\n        translate([0, snap_protrude, z + snap_bump_h*0.3])\\n            cube([snap_w, 0.01, 0.01]);\\n        translate([0, 0.01, z + snap_bump_h])\\n            cube([snap_w, 0.01, 0.01]);\\n    }\\n    // Blend back to wall above\\n    hull() {\\n        translate([0, 0.01, z + snap_bump_h])\\n            cube([snap_w, 0.01, 0.01]);\\n        translate([0, 0, z + snap_bump_h + 2])\\n            cube([snap_w, 0.01, 0.01]);\\n    }\\n}\\n\\n// ===== Main Case =====\\nmodule battery_case() {\\n    snap_z = slot_h - snap_from_top - snap_bump_h;\\n    \\n    difference() {\\n        union() {\\n            // --- Outer shell ---\\n            rcube([case_w, case_d, case_h], corner_r);\\n            \\n            // --- Snap tabs on X walls (left/right of each slot) ---\\n            for (i = [0:n_bat-1]) {\\n                sy = slot_y(i);\\n                // Left wall snaps (wall face at x=wall, protrude into +X)\\n                translate([wall, sy + (slot_d-snap_w)/2, floor_t])\\n                    snap_bump(snap_z);\\n                // Right wall snaps (wall face at x=wall+slot_w, protrude into -X)\\n                translate([wall+slot_w, sy + (slot_d+snap_w)/2, floor_t])\\n                    rotate([0,0,180])\\n                        snap_bump(snap_z);\\n            }\\n        }\\n        \\n        // --- Slot cavities ---\\n        for (i = [0:n_bat-1]) {\\n            sy = slot_y(i);\\n            \\n            // Main cavity\\n            translate([wall, sy, floor_t])\\n                cube([slot_w, slot_d, slot_h + 10]);\\n            \\n            // Top entry chamfer - gentle flare for easy insertion\\n            hull() {\\n                translate([wall, sy, case_h - 2.5])\\n                    cube([slot_w, slot_d, 0.01]);\\n                translate([wall-1.2, sy-0.8, case_h + 0.01])\\n                    cube([slot_w+2.4, slot_d+1.6, 0.01]);\\n            }\\n            \\n            // Finger hole through floor\\n            translate([wall + slot_w/2, sy + slot_d/2, -1])\\n                cylinder(d=finger_d, h=floor_t + 2);\\n            \\n            // Finger hole chamfer on bottom for comfort\\n            translate([wall + slot_w/2, sy + slot_d/2, -0.01])\\n                mirror([0,0,1])\\n                    cylinder(d1=finger_d, d2=finger_d+4, h=1.5);\\n        }\\n        \\n        // --- Top outer edge chamfer ---\\n        difference() {\\n            translate([-1, -1, case_h - 1.2])\\n                cube([case_w+2, case_d+2, 1.7]);\\n            // Inner volume to keep\\n            hull() {\\n                translate([0, 0, case_h - 1.2])\\n                    rcube([case_w, case_d, 0.01], corner_r);\\n                translate([0.8, 0.8, case_h + 0.01])\\n                    rcube([case_w-1.6, case_d-1.6, 0.01], max(corner_r-0.8, 0.5));\\n            }\\n        }\\n        \\n        // --- Engraved text ---\\n        // \"BLS-5\" on front\\n        translate([case_w/2, -0.01, case_h*0.45])\\n            rotate([90, 0, 0])\\n                mirror([1,0,0])\\n                    linear_extrude(height=0.8)\\n                        text(\"BLS-5\", size=7, halign=\"center\", valign=\"center\",\\n                             font=\"Liberation Sans:style=Bold\");\\n                             \\n        // \"\u00d74\" below\\n        translate([case_w/2, -0.01, case_h*0.45 - 11])\\n            rotate([90, 0, 0])\\n                mirror([1,0,0])\\n                    linear_extrude(height=0.8)\\n                        text(\"\u00d74\", size=5.5, halign=\"center\", valign=\"center\",\\n                             font=\"Liberation Sans\");\\n        \\n        // Decorative grip lines on both short ends\\n        for (side = [0, 1]) {\\n            for (j = [0:5]) {\\n                z = floor_t + 8 + j*5;\\n                if (side == 0) {\\n                    translate([-0.01, wall + 3 + j*0, z])\\n                        rotate([0, 90, 0])\\n                            cylinder(d=1.2, h=0.8, $fn=16);\\n                }\\n            }\\n        }\\n    }\\n}\\n\\n// ===== Grip ribs on bottom =====\\nmodule bottom_ribs() {\\n    rib_h = 0.8;\\n    rib_w = 1.2;\\n    // Cross ribs on bottom for grip on table\\n    for (x = [5 : 6 : case_w-3]) {\\n        translate([x, corner_r, -rib_h])\\n            cube([rib_w, case_d - 2*corner_r, rib_h]);\\n    }\\n}\\n\\n// ===== Final Assembly =====\\nmodule final_case() {\\n    union() {\\n        battery_case();\\n        bottom_ribs();\\n    }\\n}\\n\\nfinal_case();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_01NdpT8o9n3LusX8UQrW7T9w",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_01FTKLpC17j9wY7sg7KisicJ",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_01FTKLpC17j9wY7sg7KisicJ",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_01FXKskXkpHLEPMiku5N8Xfg",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 220, 'azimuth': 25, 'elevation': 30}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_01FXKskXkpHLEPMiku5N8Xfg",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_01JVZ94q5Ks2Gj9idHKBtCyC",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 220, 'azimuth': 200, 'elevation': -30}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_01JVZ94q5Ks2Gj9idHKBtCyC",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "Looking great! The case has:\n- Clean rounded outer shell\n- 4 slots visible from top\n- Finger holes visible on bottom\n- Bottom grip ribs\n- Text engraving on front\n\nLet me check the interior detail one more time:"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_017a3sWPdWGB6aBfY1yQxdMR",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 130, 'azimuth': 60, 'elevation': 65}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_017a3sWPdWGB6aBfY1yQxdMR",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_01N6TBTiyRZSsRPz36WnDfGz",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 80, 'azimuth': 90, 'elevation': 20}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_01N6TBTiyRZSsRPz36WnDfGz",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "I can see the snap bumps inside each slot near the top of the walls. The design looks solid. Let me do one final check - view the text from the front:"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_vrtx_01CCdsE1PBTeotAgaEotv87e",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 180, 'azimuth': 0, 'elevation': 5}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_vrtx_01CCdsE1PBTeotAgaEotv87e",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "The text appears mirrored. Let me fix that:"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_vrtx_01PHP3QP8bpTGEJBxvWk2fNr",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// Olympus BLS-5 Battery Case - 4x1 Linear Arrangement\\n// Battery: 56 x 36 x 13 mm\\n// Upright on 13x36mm face, largest faces (56x36) facing each other\\n// One-piece 3D printable, snap-fit retention, finger holes for removal\\n\\n// ===== Parameters =====\\nbat_w = 36;    // width (X)\\nbat_d = 13;    // depth (Y) - batteries lined up along Y\\nbat_h = 56;    // height (Z) - standing upright\\n\\ntol = 0.5;\\nwall = 2.5;\\nfloor_t = 3.0;\\ndivider_t = 2.0;\\n\\nslot_w = bat_w + 2*tol;     // 37\\nslot_d = bat_d + 2*tol;     // 14\\nexpose = 10;                 // battery protrudes above case for grip\\nslot_h = bat_h - expose;    // 46mm internal height\\n\\nn_bat = 4;\\n\\n// Snap-fit\\nsnap_w = 10;\\nsnap_protrude = 1.0;\\nsnap_bump_h = 2.5;\\nsnap_from_top = 4;\\n\\n// Finger hole\\nfinger_d = 16;\\n\\ncorner_r = 3;\\n\\n// Overall\\ncase_w = slot_w + 2*wall;\\ncase_d = n_bat*slot_d + (n_bat-1)*divider_t + 2*wall;\\ncase_h = slot_h + floor_t;\\n\\n$fn = 48;\\n\\necho(str(\"Case: \", case_w, \"x\", case_d, \"x\", case_h, \" mm\"));\\n\\n// ===== Helpers =====\\nmodule rcube(size, r) {\\n    hull() {\\n        for (x=[r, size[0]-r], y=[r, size[1]-r])\\n            translate([x, y, 0])\\n                cylinder(r=r, h=size[2]);\\n    }\\n}\\n\\nfunction slot_y(i) = wall + i*(slot_d + divider_t);\\n\\n// Snap bump on wall surface, protrudes in +Y\\nmodule snap_bump(z_base) {\\n    z = z_base;\\n    // Retention ledge (sharper bottom face for positive lock)\\n    hull() {\\n        translate([0, 0, z])\\n            cube([snap_w, 0.01, snap_bump_h*0.3]);\\n        translate([0, snap_protrude, z + snap_bump_h*0.3])\\n            cube([snap_w, 0.01, 0.01]);\\n    }\\n    // Ramp (gentler top face for push-in)\\n    hull() {\\n        translate([0, snap_protrude, z + snap_bump_h*0.3])\\n            cube([snap_w, 0.01, 0.01]);\\n        translate([0, 0.01, z + snap_bump_h])\\n            cube([snap_w, 0.01, 0.01]);\\n    }\\n    // Blend back to wall above\\n    hull() {\\n        translate([0, 0.01, z + snap_bump_h])\\n            cube([snap_w, 0.01, 0.01]);\\n        translate([0, 0, z + snap_bump_h + 2])\\n            cube([snap_w, 0.01, 0.01]);\\n    }\\n}\\n\\n// ===== Main Case =====\\nmodule battery_case() {\\n    snap_z = slot_h - snap_from_top - snap_bump_h;\\n    \\n    difference() {\\n        union() {\\n            // --- Outer shell ---\\n            rcube([case_w, case_d, case_h], corner_r);\\n            \\n            // --- Snap tabs on X walls (left/right of each slot) ---\\n            for (i = [0:n_bat-1]) {\\n                sy = slot_y(i);\\n                // Left wall snaps\\n                translate([wall, sy + (slot_d-snap_w)/2, floor_t])\\n                    snap_bump(snap_z);\\n                // Right wall snaps\\n                translate([wall+slot_w, sy + (slot_d+snap_w)/2, floor_t])\\n                    rotate([0,0,180])\\n                        snap_bump(snap_z);\\n            }\\n            \\n            // --- Bottom grip ribs ---\\n            for (x = [5 : 6 : case_w-3]) {\\n                translate([x, corner_r, -0.8])\\n                    cube([1.2, case_d - 2*corner_r, 0.8]);\\n            }\\n        }\\n        \\n        // --- Slot cavities ---\\n        for (i = [0:n_bat-1]) {\\n            sy = slot_y(i);\\n            \\n            // Main cavity\\n            translate([wall, sy, floor_t])\\n                cube([slot_w, slot_d, slot_h + 10]);\\n            \\n            // Top entry chamfer for easy battery insertion\\n            hull() {\\n                translate([wall, sy, case_h - 2.5])\\n                    cube([slot_w, slot_d, 0.01]);\\n                translate([wall-1.2, sy-0.8, case_h + 0.01])\\n                    cube([slot_w+2.4, slot_d+1.6, 0.01]);\\n            }\\n            \\n            // Finger hole through floor\\n            translate([wall + slot_w/2, sy + slot_d/2, -2])\\n                cylinder(d=finger_d, h=floor_t + 4);\\n            \\n            // Finger hole chamfer on bottom for comfort\\n            translate([wall + slot_w/2, sy + slot_d/2, -0.01])\\n                mirror([0,0,1])\\n                    cylinder(d1=finger_d, d2=finger_d+4, h=1.5);\\n        }\\n        \\n        // --- Top outer edge chamfer ---\\n        difference() {\\n            translate([-1, -1, case_h - 1.2])\\n                cube([case_w+2, case_d+2, 1.7]);\\n            hull() {\\n                translate([0, 0, case_h - 1.2])\\n                    rcube([case_w, case_d, 0.01], corner_r);\\n                translate([0.8, 0.8, case_h + 0.01])\\n                    rcube([case_w-1.6, case_d-1.6, 0.01], max(corner_r-0.8, 0.5));\\n            }\\n        }\\n        \\n        // --- Engraved text on front face (Y=0 face) ---\\n        translate([case_w/2, 0.8, case_h*0.45])\\n            rotate([90, 0, 0])\\n                linear_extrude(height=0.8)\\n                    text(\"BLS-5\", size=7, halign=\"center\", valign=\"center\",\\n                         font=\"Liberation Sans:style=Bold\");\\n                         \\n        translate([case_w/2, 0.8, case_h*0.45 - 11])\\n            rotate([90, 0, 0])\\n                linear_extrude(height=0.8)\\n                    text(\"\u00d74\", size=5.5, halign=\"center\", valign=\"center\",\\n                         font=\"Liberation Sans\");\\n    }\\n}\\n\\nbattery_case();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_vrtx_01PHP3QP8bpTGEJBxvWk2fNr",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_vrtx_01Q5e6y4avNSrV7piCNszEge",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 180, 'azimuth': 0, 'elevation': 5}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_vrtx_01Q5e6y4avNSrV7piCNszEge",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_vrtx_01CaBHWVxwGNnkE2vMNGMry1",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 220, 'azimuth': 25, 'elevation': 30}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_vrtx_01CaBHWVxwGNnkE2vMNGMry1",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "The text is now reading correctly on the front face. Let me do a comprehensive final check:"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_018tcGhuP2pxa6tAWtdj3s5v",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_018tcGhuP2pxa6tAWtdj3s5v",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_01WsEb8xiy53qux3X8puLZVb",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 200, 'azimuth': 0, 'elevation': -90}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_01WsEb8xiy53qux3X8puLZVb",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_01BnUThYYedXan6bXfeCGHNj",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 200, 'azimuth': 0, 'elevation': 90}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_01BnUThYYedXan6bXfeCGHNj",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "The design looks complete and well-formed. Let me verify all the features:\n\n1. \u2705 **4 battery slots** in linear 4\u00d71 arrangement\n2. \u2705 **Upright orientation** - batteries stand on their smallest face (13\u00d736mm)\n3. \u2705 **Largest faces facing each other** - the 56\u00d736mm faces are adjacent\n4. \u2705 **Snap-fit bumps** on left and right walls of each slot near the top for retention\n5. \u2705 **Finger holes** through the floor of each slot for easy battery removal\n6. \u2705 **Chamfered finger holes** on bottom for comfort\n7. \u2705 **Top entry chamfers** for easy battery insertion\n8. \u2705 **One-piece printable** - prints upside down or right-side up with no supports needed if printed upright\n9. \u2705 **Rounded corners** for comfortable handling\n10. \u2705 **Bottom grip ribs**\n11. \u2705 **Engraved \"BLS-5 \u00d74\" text** on front\n12. \u2705 **Batteries protrude 10mm** above case for easy grip when removing"
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "toolu_bdrk_01D3kecBYu2xeMjVWkF5WcUG",
+        "type": "function",
+        "function": {
+          "name": "submit",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "toolu_bdrk_01D3kecBYu2xeMjVWkF5WcUG",
+    "content": "{\"success\": true, \"message\": \"Solution submitted\"}"
+  }
+]
