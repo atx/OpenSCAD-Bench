@@ -15,18 +15,18 @@
     "role": "assistant",
     "tool_calls": [
       {
-        "id": "call_pArd6i1NDPg1r5yTjT4FQbRD",
+        "id": "call_ZzrjjzCUNcg0bu9E9Ko7NMmC",
         "type": "function",
         "function": {
           "name": "write_scad",
-          "arguments": "{'content': '// Olympus BLS-5 4x1 battery case\\n// Batteries stand on 36x13 face; height 56\\n\\n$fn = 80;\\n\\n// Parameters\\nbattery_w = 36;    // along Y (width of largest face)\\nbattery_t = 13;    // along X (thickness / row direction)\\nbattery_h = 56;    // vertical height\\nclear_xy = 0.6;    // clearance on X/Y\\nclear_z = 2;       // clearance on Z\\nwall = 2;          // outer and divider wall thickness\\nbase_th = 2;       // bottom thickness\\nrim_th = 2;        // top rim thickness\\n\\n// Derived inner sizes\\nslot_x = battery_t + clear_xy; // along row\\nslot_y = battery_w + clear_xy; // depth\\nslot_h = battery_h + clear_z;  // usable height\\n\\nslots = 4;\\n\\ntotal_x = slots * slot_x + (slots + 1) * wall;\\ntotal_y = slot_y + 2 * wall;\\ntotal_z = base_th + slot_h + rim_th;\\n\\nfinger_r_x = 9; // finger hole radius along X (oval)\\nfinger_r_y = 6; // radius along Y (oval)\\nfinger_hole_depth = base_th + 16; // how high the hole pushes up into slot\\n\\nnib_inset = 0.8; // inward overhang depth\\nnib_height = 1.6;\\n\\nmodule body_block(){\\n    cube([total_x, total_y, total_z], center=false);\\n}\\n\\nmodule slot_cavity(index){\\n    x0 = wall + index * (slot_x + wall);\\n    translate([x0, wall, base_th])\\n        cube([slot_x, slot_y, slot_h], center=false);\\n}\\n\\nmodule finger_hole(index){\\n    x_center = wall + slot_x/2 + index * (slot_x + wall);\\n    y_center = total_y/2;\\n    translate([x_center, y_center, 0])\\n        linear_extrude(height=finger_hole_depth, center=false)\\n            offset(r=0)\\n                square([finger_r_x*2, finger_r_y*2], center=true);\\n}\\n\\nmodule nibs(index){\\n    // small inward lips on both long sides near the rim\\n    x0 = wall + index * (slot_x + wall);\\n    z0 = total_z - rim_th - nib_height + 0.2;\\n    nib_len = slot_x - 2; // leave clearance near dividers\\n    // front nib (y at wall)\\n    translate([x0 + 1, wall - 0.01, z0])\\n        cube([nib_len, nib_inset, nib_height]);\\n    // back nib (y at wall + slot_y)\\n    translate([x0 + 1, wall + slot_y - nib_inset + 0.01, z0])\\n        cube([nib_len, nib_inset, nib_height]);\\n}\\n\\nmodule case_model(){\\n    difference(){\\n        body_block();\\n        // cavities\\n        for(i=[0:slots-1]) slot_cavity(i);\\n        // finger holes\\n        for(i=[0:slots-1]) finger_hole(i);\\n    }\\n    // add nibs after subtraction\\n    for(i=[0:slots-1]) nibs(i);\\n}\\n\\ncase_model();\\n'}"
+          "arguments": "{'content': '// Olympus BLS-5 4-slot vertical case with snap-fit and finger holes\\n// Dimensions: battery 56 x 36 x 13 mm\\n\\n// Parameters\\nbattery = [56,36,13];\\nclearance = 0.6;           // general clearance around battery\\nslot_w = battery[1] + clearance;    // 36 + c (X direction)\\nslot_d = battery[2] + clearance;    // 13 + c (Y direction)\\nslot_h = battery[0] + 0.5;          // height allowance (Z direction)\\n\\nwall = 2.0;                // outer wall thickness\\ndivider = 1.5;             // between slots\\nbase_thick = 2.2;          // bottom thickness\\nrim_thick = 2.0;           // top frame thickness\\nlip_over = 1.0;            // snap lip inward overhang\\nlip_drop = 1.5;            // lip depth downward\\nfinger_r = 8;              // radius of main finger hole\\nfinger_slot_offset = 6;    // spread for oval hull of finger hole\\n\\n// Derived sizes\\nslots = 4;\\nouter_len = 2*wall + slots*slot_w + (slots-1)*divider;\\nouter_dep = 2*wall + slot_d;\\nouter_h   = base_thick + slot_h + rim_thick;\\n\\n$fn=64;\\n\\nmodule finger_hole(xc){\\n    // Oval-ish hole through base for finger push\\n    translate([xc, wall + slot_d/2, 0])\\n        hull(){\\n            translate([0, -finger_slot_offset/2, 0]) cylinder(r=finger_r, h=base_thick+1, center=false);\\n            translate([0,  finger_slot_offset/2, 0]) cylinder(r=finger_r, h=base_thick+1, center=false);\\n        }\\n}\\n\\nmodule slot_cavity(i){\\n    translate([wall + i*(slot_w+divider), wall, base_thick])\\n        cube([slot_w, slot_d, slot_h + 0.2], center=false);\\n}\\n\\nmodule snap_lips(i){\\n    x0 = wall + i*(slot_w+divider);\\n    z0 = base_thick + slot_h - lip_drop;\\n    // long lips along X on both Y sides\\n    translate([x0, wall - 0.01, z0])\\n        cube([slot_w, lip_over+0.02, lip_drop], center=false);\\n    translate([x0, wall + slot_d - lip_over +0.01, z0])\\n        cube([slot_w, lip_over+0.02, lip_drop], center=false);\\n    // small entry chamfer blocks (short bevels) at slot entrance\\n    translate([x0, wall, base_thick + slot_h - 0.5])\\n        cube([slot_w, 1.0, 0.5], center=false);\\n    translate([x0, wall + slot_d -1.0, base_thick + slot_h - 0.5])\\n        cube([slot_w, 1.0, 0.5], center=false);\\n}\\n\\nmodule body(){\\n    difference(){\\n        // outer shell\\n        cube([outer_len, outer_dep, outer_h], center=false);\\n        // inner bulk removal\\n        translate([wall, wall, base_thick])\\n            cube([outer_len-2*wall, outer_dep-2*wall, slot_h + rim_thick], center=false);\\n        // individual cavities for walls/dividers crisp (optional)\\n        for(i=[0:slots-1]) slot_cavity(i);\\n        // finger holes\\n        for(i=[0:slots-1]) finger_hole(wall + slot_w/2 + i*(slot_w+divider));\\n    }\\n    // snap lips\\n    for(i=[0:slots-1]) snap_lips(i);\\n}\\n\\n// add small feet chamfer\\nmodule chamfer_base(){\\n    linear_extrude(height=1)\\n        offset(delta=1) square([outer_len, outer_dep]);\\n}\\n\\nunion(){\\n    body();\\n    // optional chamfer skirt at bottom for easier printing\\n    translate([0,0,-1]) chamfer_base();\\n}\\n'}"
         }
       }
     ]
   },
   {
     "role": "tool",
-    "tool_call_id": "call_pArd6i1NDPg1r5yTjT4FQbRD",
+    "tool_call_id": "call_ZzrjjzCUNcg0bu9E9Ko7NMmC",
     "content": "{\"success\": true}"
   },
   {
@@ -37,7 +37,7 @@
     "role": "assistant",
     "tool_calls": [
       {
-        "id": "call_9PSmH8mo2tNV2vlbRyAiOsvd",
+        "id": "call_oi7TRKSDGt0VhqxgBW8AnAhv",
         "type": "function",
         "function": {
           "name": "render_overview",
@@ -48,11 +48,33 @@
   },
   {
     "role": "tool",
-    "tool_call_id": "call_9PSmH8mo2tNV2vlbRyAiOsvd",
+    "tool_call_id": "call_oi7TRKSDGt0VhqxgBW8AnAhv",
     "content": "{\"success\": true}"
   },
   {
     "role": "assistant",
-    "content": "Rendered an initial 4\u00d71 battery case with cavities, bottom finger holes, and small top nibs to retain the cells. Would you like me to adjust clearances, strengthen walls, or change the snap details?"
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_3z21Dj1Q9bcs6ruVeB5p4C91",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 280, 'azimuth': 35, 'elevation': 30}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_3z21Dj1Q9bcs6ruVeB5p4C91",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": "Here\u2019s the finished OpenSCAD model for a four\u2011slot Olympus BLS\u20115 battery case with snap\u2011fit retainers and finger push holes. It prints in one piece.\n\nKey details:\n- Battery dims: 56 x 36 x 13 mm\n- Slot clearance: +0.6 mm (footprint 36.6 x 13.6, height 56.5)\n- Walls: 2 mm outer, 1.5 mm dividers\n- Base: 2.2 mm thick with large oval finger holes under each slot\n- Snap lips: small 1 mm overhangs at the top on both long sides of each slot\n- Top rim: 2 mm\n- Overall size: ~155 x 18 x 61 mm\n\nLet me know if you want tighter/looser clearance, different finger hole size, or a lid."
   }
 ]

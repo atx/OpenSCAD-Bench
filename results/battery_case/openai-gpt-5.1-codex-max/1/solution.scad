@@ -1,78 +1,83 @@
-// Olympus BLS-5 4x1 battery case
-// Batteries stand on 36x13 face; height 56
-
-$fn = 80;
+// Olympus BLS-5 4-slot vertical case with snap-fit and finger holes
+// Dimensions: battery 56 x 36 x 13 mm
 
 // Parameters
-battery_w = 36;    // along Y (width of largest face)
-battery_t = 13;    // along X (thickness / row direction)
-battery_h = 56;    // vertical height
-clear_xy = 0.6;    // clearance on X/Y
-clear_z = 2;       // clearance on Z
-wall = 2;          // outer and divider wall thickness
-base_th = 2;       // bottom thickness
-rim_th = 2;        // top rim thickness
+battery = [56,36,13];
+clearance = 0.6;           // general clearance around battery
+slot_w = battery[1] + clearance;    // 36 + c (X direction)
+slot_d = battery[2] + clearance;    // 13 + c (Y direction)
+slot_h = battery[0] + 0.5;          // height allowance (Z direction)
 
-// Derived inner sizes
-slot_x = battery_t + clear_xy; // along row
-slot_y = battery_w + clear_xy; // depth
-slot_h = battery_h + clear_z;  // usable height
+wall = 2.0;                // outer wall thickness
+divider = 1.5;             // between slots
+base_thick = 2.2;          // bottom thickness
+rim_thick = 2.0;           // top frame thickness
+lip_over = 1.0;            // snap lip inward overhang
+lip_drop = 1.5;            // lip depth downward
+finger_r = 8;              // radius of main finger hole
+finger_slot_offset = 6;    // spread for oval hull of finger hole
 
+// Derived sizes
 slots = 4;
+outer_len = 2*wall + slots*slot_w + (slots-1)*divider;
+outer_dep = 2*wall + slot_d;
+outer_h   = base_thick + slot_h + rim_thick;
 
-total_x = slots * slot_x + (slots + 1) * wall;
-total_y = slot_y + 2 * wall;
-total_z = base_th + slot_h + rim_th;
+$fn=64;
 
-finger_r_x = 9; // finger hole radius along X (oval)
-finger_r_y = 6; // radius along Y (oval)
-finger_hole_depth = base_th + 16; // how high the hole pushes up into slot
-
-nib_inset = 0.8; // inward overhang depth
-nib_height = 1.6;
-
-module body_block(){
-    cube([total_x, total_y, total_z], center=false);
+module finger_hole(xc){
+    // Oval-ish hole through base for finger push
+    translate([xc, wall + slot_d/2, 0])
+        hull(){
+            translate([0, -finger_slot_offset/2, 0]) cylinder(r=finger_r, h=base_thick+1, center=false);
+            translate([0,  finger_slot_offset/2, 0]) cylinder(r=finger_r, h=base_thick+1, center=false);
+        }
 }
 
-module slot_cavity(index){
-    x0 = wall + index * (slot_x + wall);
-    translate([x0, wall, base_th])
-        cube([slot_x, slot_y, slot_h], center=false);
+module slot_cavity(i){
+    translate([wall + i*(slot_w+divider), wall, base_thick])
+        cube([slot_w, slot_d, slot_h + 0.2], center=false);
 }
 
-module finger_hole(index){
-    x_center = wall + slot_x/2 + index * (slot_x + wall);
-    y_center = total_y/2;
-    translate([x_center, y_center, 0])
-        linear_extrude(height=finger_hole_depth, center=false)
-            offset(r=0)
-                square([finger_r_x*2, finger_r_y*2], center=true);
+module snap_lips(i){
+    x0 = wall + i*(slot_w+divider);
+    z0 = base_thick + slot_h - lip_drop;
+    // long lips along X on both Y sides
+    translate([x0, wall - 0.01, z0])
+        cube([slot_w, lip_over+0.02, lip_drop], center=false);
+    translate([x0, wall + slot_d - lip_over +0.01, z0])
+        cube([slot_w, lip_over+0.02, lip_drop], center=false);
+    // small entry chamfer blocks (short bevels) at slot entrance
+    translate([x0, wall, base_thick + slot_h - 0.5])
+        cube([slot_w, 1.0, 0.5], center=false);
+    translate([x0, wall + slot_d -1.0, base_thick + slot_h - 0.5])
+        cube([slot_w, 1.0, 0.5], center=false);
 }
 
-module nibs(index){
-    // small inward lips on both long sides near the rim
-    x0 = wall + index * (slot_x + wall);
-    z0 = total_z - rim_th - nib_height + 0.2;
-    nib_len = slot_x - 2; // leave clearance near dividers
-    // front nib (y at wall)
-    translate([x0 + 1, wall - 0.01, z0])
-        cube([nib_len, nib_inset, nib_height]);
-    // back nib (y at wall + slot_y)
-    translate([x0 + 1, wall + slot_y - nib_inset + 0.01, z0])
-        cube([nib_len, nib_inset, nib_height]);
-}
-
-module case_model(){
+module body(){
     difference(){
-        body_block();
-        // cavities
+        // outer shell
+        cube([outer_len, outer_dep, outer_h], center=false);
+        // inner bulk removal
+        translate([wall, wall, base_thick])
+            cube([outer_len-2*wall, outer_dep-2*wall, slot_h + rim_thick], center=false);
+        // individual cavities for walls/dividers crisp (optional)
         for(i=[0:slots-1]) slot_cavity(i);
         // finger holes
-        for(i=[0:slots-1]) finger_hole(i);
+        for(i=[0:slots-1]) finger_hole(wall + slot_w/2 + i*(slot_w+divider));
     }
-    // add nibs after subtraction
-    for(i=[0:slots-1]) nibs(i);
+    // snap lips
+    for(i=[0:slots-1]) snap_lips(i);
 }
 
-case_model();
+// add small feet chamfer
+module chamfer_base(){
+    linear_extrude(height=1)
+        offset(delta=1) square([outer_len, outer_dep]);
+}
+
+union(){
+    body();
+    // optional chamfer skirt at bottom for easier printing
+    translate([0,0,-1]) chamfer_base();
+}

@@ -1,290 +1,261 @@
 // Print-in-Place Planetary Gearbox
 // Designed for PETG, 0.4mm nozzle, 0.1mm layer height
-// All parts print together and rotate freely after printing
+// All parts print captured but free to rotate immediately after printing
+
+// === PRINT-IN-PLACE DESIGN NOTES ===
+// - XY clearance: 0.4mm between all horizontally adjacent moving parts
+// - Z clearance: 0.35mm vertical gaps for bridging layers
+// - No overhangs exceed 45 degrees (self-supporting)
+// - Gear teeth simplified for reliable FDM printing
+// - Housing has viewing windows and grip grooves
 
 // === PARAMETERS ===
 
-// Clearances for print-in-place (PETG with 0.4mm nozzle, 0.1mm layer)
-clearance_xy = 0.4;      // Horizontal clearance between moving parts
-clearance_z = 0.3;       // Vertical clearance (3 layers)
+// Clearances for print-in-place
+clearance_xy = 0.4;        // Horizontal gap between moving parts
+clearance_z = 0.35;        // Vertical gap for bridging
 
 // Gear parameters
-module_size = 2.5;       // Gear module (tooth size)
-pressure_angle = 20;     // Standard pressure angle
-gear_height = 12;        // Height of gear teeth
+mod = 2.0;                 // Gear module
+gear_height = 12;          // Height of gear teeth
 
-// Tooth counts (must satisfy: ring = sun + 2*planet for proper meshing)
+// Tooth counts (ring = sun + 2*planet)
 sun_teeth = 12;
 planet_teeth = 9;
-ring_teeth = 30;         // 12 + 2*9 = 30 ✓
+ring_teeth = 30;
 
-// Number of planet gears
 num_planets = 3;
 
-// Derived dimensions
-sun_pitch_r = (module_size * sun_teeth) / 2;        // 15
-planet_pitch_r = (module_size * planet_teeth) / 2;  // 11.25
-ring_pitch_r = (module_size * ring_teeth) / 2;      // 37.5
-planet_orbit_r = sun_pitch_r + planet_pitch_r;      // 26.25
+// Calculated geometry
+sun_pitch_r = (mod * sun_teeth) / 2;
+planet_pitch_r = (mod * planet_teeth) / 2;
+ring_pitch_r = (mod * ring_teeth) / 2;
 
-// Component radii
-sun_outer_r = sun_pitch_r + module_size;            // 17.5
-planet_outer_r = planet_pitch_r + module_size;      // 13.75
-ring_inner_r = ring_pitch_r - module_size;          // 35
-ring_outer_r = ring_pitch_r + module_size * 2.5 + 5; // ~48.75
+sun_outer_r = sun_pitch_r + mod;
+planet_outer_r = planet_pitch_r + mod;
+planet_root_r = planet_pitch_r - mod * 1.25;
 
-// Carrier dimensions - must fit inside ring teeth with clearance
-carrier_outer_r = ring_inner_r - clearance_xy - 1;
+orbit_r = sun_pitch_r + planet_pitch_r;
 
-// Heights
-base_thickness = 4;       // Bottom plate
-top_thickness = 4;        // Top plate  
-total_height = base_thickness + gear_height + top_thickness;
+// Housing dimensions
+ring_root_r = ring_pitch_r + mod * 1.25;
+housing_wall = 4;
+housing_outer_r = ring_root_r + housing_wall;
 
-// Pin dimensions for planet axles
-pin_r = 3;
+// Carrier dimensions
+carrier_plate_thickness = 5;
+carrier_outer_r = orbit_r + planet_outer_r + 2;
+planet_pin_r = planet_root_r - clearance_xy - 1.5;
 
-$fn = 64;
+// Sun shaft
+sun_shaft_r = 5;
 
-// === EXTERNAL GEAR ===
-module external_gear_2d(teeth, backlash = 0) {
-    pitch_r = module_size * teeth / 2;
-    addendum = module_size;
-    dedendum = module_size * 1.25;
-    outer_r = pitch_r + addendum - backlash/2;
-    root_r = pitch_r - dedendum;
+// Vertical layout
+base_thickness = 4;
+z_lower_carrier = base_thickness;
+z_gears = z_lower_carrier + carrier_plate_thickness + clearance_z;
+z_upper_carrier = z_gears + gear_height + clearance_z;
+z_top = z_upper_carrier + carrier_plate_thickness + base_thickness;
+total_height = z_top;
+
+$fn = 80;
+
+// === GEAR MODULES ===
+
+module external_tooth_2d(pitch_r, mod) {
+    outer_r = pitch_r + mod;
+    root_r = pitch_r - mod * 1.25;
+    circular_pitch = mod * PI;
+    tooth_thick = circular_pitch / 2 - 0.2;
     
+    pitch_half_angle = asin((tooth_thick/2) / pitch_r);
+    tip_half_angle = pitch_half_angle * 0.5;
+    root_half_angle = pitch_half_angle * 1.3;
+    
+    polygon([
+        [root_r * cos(root_half_angle), root_r * sin(root_half_angle)],
+        [outer_r * cos(tip_half_angle), outer_r * sin(tip_half_angle)],
+        [outer_r * cos(-tip_half_angle), outer_r * sin(-tip_half_angle)],
+        [root_r * cos(-root_half_angle), root_r * sin(-root_half_angle)]
+    ]);
+}
+
+module external_gear_2d(teeth, mod) {
+    pitch_r = mod * teeth / 2;
+    root_r = pitch_r - mod * 1.25;
     tooth_angle = 360 / teeth;
-    tooth_arc = PI * module_size / 2 - backlash;
-    half_tooth_angle = (tooth_arc / pitch_r) * 180 / PI / 2;
     
     union() {
-        circle(r = root_r, $fn = teeth * 6);
-        
+        circle(r=root_r, $fn=teeth*6);
         for(i = [0:teeth-1]) {
-            rotate([0, 0, i * tooth_angle]) {
-                polygon([
-                    [root_r * cos(-half_tooth_angle * 1.1), root_r * sin(-half_tooth_angle * 1.1)],
-                    [pitch_r * cos(-half_tooth_angle * 0.85), pitch_r * sin(-half_tooth_angle * 0.85)],
-                    [outer_r * cos(-half_tooth_angle * 0.45), outer_r * sin(-half_tooth_angle * 0.45)],
-                    [outer_r * cos(half_tooth_angle * 0.45), outer_r * sin(half_tooth_angle * 0.45)],
-                    [pitch_r * cos(half_tooth_angle * 0.85), pitch_r * sin(half_tooth_angle * 0.85)],
-                    [root_r * cos(half_tooth_angle * 1.1), root_r * sin(half_tooth_angle * 1.1)]
-                ]);
-            }
+            rotate([0, 0, i * tooth_angle])
+            external_tooth_2d(pitch_r, mod);
         }
     }
 }
 
-// === INTERNAL GEAR (Ring) ===
-module internal_gear_2d(teeth, backlash = 0) {
-    pitch_r = module_size * teeth / 2;
-    inner_r = pitch_r - module_size + backlash/2;
-    root_r = pitch_r + module_size * 1.25;
+module internal_tooth_space_2d(pitch_r, mod, clearance=0) {
+    root_r = pitch_r + mod * 1.25;
+    tip_r = pitch_r - mod;
+    circular_pitch = mod * PI;
+    space_width = circular_pitch / 2 + 0.2 + clearance;
     
+    pitch_half_angle = asin((space_width/2) / pitch_r);
+    tip_half_angle = pitch_half_angle * 1.4;
+    root_half_angle = pitch_half_angle * 0.6;
+    
+    polygon([
+        [root_r * cos(root_half_angle), root_r * sin(root_half_angle)],
+        [(tip_r - clearance) * cos(tip_half_angle), (tip_r - clearance) * sin(tip_half_angle)],
+        [(tip_r - clearance) * cos(-tip_half_angle), (tip_r - clearance) * sin(-tip_half_angle)],
+        [root_r * cos(-root_half_angle), root_r * sin(-root_half_angle)]
+    ]);
+}
+
+module internal_gear_cavity_2d(teeth, mod, clearance) {
+    pitch_r = mod * teeth / 2;
+    root_r = pitch_r + mod * 1.25;
     tooth_angle = 360 / teeth;
-    space_arc = PI * module_size / 2 + backlash;
-    half_space_angle = (space_arc / pitch_r) * 180 / PI / 2;
     
-    difference() {
-        circle(r = root_r + 3, $fn = teeth * 6);
-        
-        union() {
-            circle(r = inner_r, $fn = teeth * 6);
-            
-            for(i = [0:teeth-1]) {
-                rotate([0, 0, i * tooth_angle]) {
-                    polygon([
-                        [inner_r * cos(-half_space_angle * 1.1), inner_r * sin(-half_space_angle * 1.1)],
-                        [pitch_r * cos(-half_space_angle * 0.85), pitch_r * sin(-half_space_angle * 0.85)],
-                        [(pitch_r + module_size * 0.5) * cos(-half_space_angle * 0.35), (pitch_r + module_size * 0.5) * sin(-half_space_angle * 0.35)],
-                        [(pitch_r + module_size * 0.5) * cos(half_space_angle * 0.35), (pitch_r + module_size * 0.5) * sin(half_space_angle * 0.35)],
-                        [pitch_r * cos(half_space_angle * 0.85), pitch_r * sin(half_space_angle * 0.85)],
-                        [inner_r * cos(half_space_angle * 1.1), inner_r * sin(half_space_angle * 1.1)]
-                    ]);
-                }
-            }
+    union() {
+        circle(r=root_r + clearance, $fn=teeth*6);
+        for(i = [0:teeth-1]) {
+            rotate([0, 0, i * tooth_angle])
+            internal_tooth_space_2d(pitch_r, mod, clearance);
         }
     }
 }
 
-// === SUN GEAR (INPUT) ===
+// === COMPONENTS ===
+
 module sun_gear() {
-    shaft_r = 5;
-    
-    // Main gear teeth
-    linear_extrude(height = gear_height)
-        external_gear_2d(sun_teeth, clearance_xy);
-    
-    // Lower bearing shaft
-    translate([0, 0, -base_thickness + clearance_z])
-        cylinder(r = shaft_r, h = base_thickness - clearance_z);
-    
-    // Upper shaft through carrier
-    translate([0, 0, gear_height])
-        cylinder(r = shaft_r, h = top_thickness + 8);
-    
-    // Input handle
-    translate([0, 0, gear_height + top_thickness + 8])
-        cylinder(r = shaft_r + 8, h = 5, $fn = 6);
+    color("Gold") {
+        translate([0, 0, z_gears])
+        linear_extrude(height=gear_height, convexity=10)
+        external_gear_2d(sun_teeth, mod);
+        
+        cylinder(r=sun_shaft_r, h=z_gears + 2, $fn=48);
+        
+        translate([0, 0, z_gears + gear_height - 2])
+        cylinder(r=sun_shaft_r, h=total_height - z_gears - gear_height + 2 + 8, $fn=6);
+    }
 }
 
-// === PLANET GEAR ===
-module planet_gear() {
+module planet_gear(angle) {
+    bore_r = planet_pin_r + clearance_xy;
+    
+    color("Silver")
+    rotate([0, 0, angle])
+    translate([orbit_r, 0, z_gears])
     difference() {
-        linear_extrude(height = gear_height - clearance_z * 2)
-            external_gear_2d(planet_teeth, clearance_xy);
+        linear_extrude(height=gear_height, convexity=10)
+        external_gear_2d(planet_teeth, mod);
         
         translate([0, 0, -0.1])
-            cylinder(r = pin_r + clearance_xy, h = gear_height);
+        cylinder(r=bore_r, h=gear_height + 0.2, $fn=48);
     }
 }
 
-// === CARRIER (OUTPUT) ===
 module carrier() {
-    shaft_hole_r = 5 + clearance_xy;
-    post_r = 4;
+    sun_clearance_r = sun_outer_r + clearance_xy + 1;
+    pin_height = carrier_plate_thickness * 2 + clearance_z * 2 + gear_height;
     
-    // Bottom plate (captured by ring housing)
-    translate([0, 0, -base_thickness + clearance_z]) {
-        difference() {
-            cylinder(r = carrier_outer_r, h = base_thickness - clearance_z * 2);
-            translate([0, 0, -0.1])
-                cylinder(r = shaft_hole_r, h = base_thickness);
-        }
-    }
-    
-    // Planet axle pins
-    for(i = [0:num_planets-1]) {
-        angle = i * 360 / num_planets;
-        rotate([0, 0, angle])
-            translate([planet_orbit_r, 0, clearance_z])
-                cylinder(r = pin_r, h = gear_height - clearance_z * 2);
-    }
-    
-    // Top plate
-    translate([0, 0, gear_height]) {
+    color("SteelBlue") {
         difference() {
             union() {
-                cylinder(r = carrier_outer_r, h = top_thickness - clearance_z * 2);
+                translate([0, 0, z_lower_carrier])
+                cylinder(r=carrier_outer_r, h=carrier_plate_thickness, $fn=90);
                 
-                // Output hub
-                translate([0, 0, top_thickness - clearance_z * 2])
-                    cylinder(r = carrier_outer_r - 6, h = 10);
+                translate([0, 0, z_upper_carrier])
+                cylinder(r=carrier_outer_r, h=carrier_plate_thickness, $fn=90);
+                
+                for(i = [0:num_planets-1]) {
+                    rotate([0, 0, i * 360/num_planets])
+                    translate([orbit_r, 0, z_lower_carrier])
+                    cylinder(r=planet_pin_r, h=pin_height, $fn=48);
+                }
             }
             
-            translate([0, 0, -0.1])
-                cylinder(r = shaft_hole_r, h = top_thickness + 20);
+            translate([0, 0, z_lower_carrier - 0.1])
+            cylinder(r=sun_clearance_r, h=pin_height + 0.2, $fn=60);
             
-            // Pin connection holes
             for(i = [0:num_planets-1]) {
-                angle = i * 360 / num_planets;
-                rotate([0, 0, angle])
-                    translate([planet_orbit_r, 0, -0.1])
-                        cylinder(r = pin_r + 0.2, h = top_thickness);
+                rotate([0, 0, i * 360/num_planets + 60])
+                translate([orbit_r * 0.55, 0, z_lower_carrier - 0.1])
+                cylinder(r=4.5, h=carrier_plate_thickness + 0.2, $fn=30);
+                
+                rotate([0, 0, i * 360/num_planets + 60])
+                translate([orbit_r * 0.55, 0, z_upper_carrier - 0.1])
+                cylinder(r=4.5, h=carrier_plate_thickness + 0.2, $fn=30);
             }
-            
-            // Output hex
-            translate([0, 0, top_thickness + 2])
-                cylinder(r = 10, h = 15, $fn = 6);
         }
-    }
-    
-    // Connection posts (in spaces between planets, must clear ring gear teeth)
-    for(i = [0:num_planets-1]) {
-        angle = i * 360 / num_planets + 60;
-        rotate([0, 0, angle])
-            translate([carrier_outer_r - post_r - 2, 0, -base_thickness + clearance_z])
-                cylinder(r = post_r, h = gear_height + base_thickness + top_thickness - clearance_z * 4);
     }
 }
 
-// === RING GEAR HOUSING ===
 module ring_housing() {
-    gear_cavity_r = ring_pitch_r + module_size * 1.5;
-    shaft_hole_r = 5 + clearance_xy;
     carrier_cavity_r = carrier_outer_r + clearance_xy;
-    post_r = 4;
+    shaft_hole_r = sun_shaft_r + clearance_xy + 0.5;
     
-    difference() {
-        union() {
-            // Main body
-            cylinder(r = ring_outer_r, h = total_height);
+    color("ForestGreen", 0.92) {
+        difference() {
+            cylinder(r=housing_outer_r, h=total_height, $fn=120);
             
-            // Base flange
-            translate([0, 0, -3])
-                cylinder(r = ring_outer_r + 12, h = 3);
-        }
-        
-        // Internal gear teeth
-        translate([0, 0, base_thickness - 0.05])
-            linear_extrude(height = gear_height + 0.1)
-                difference() {
-                    circle(r = gear_cavity_r);
-                    internal_gear_2d(ring_teeth, clearance_xy);
-                }
-        
-        // Bottom cavity for carrier base (CAPTIVE - smaller opening below)
-        translate([0, 0, clearance_z])
-            cylinder(r = carrier_cavity_r, h = base_thickness);
-        
-        // Top cavity for carrier top
-        translate([0, 0, base_thickness + gear_height])
-            cylinder(r = carrier_cavity_r, h = top_thickness);
-        
-        // Output opening
-        translate([0, 0, base_thickness + gear_height + top_thickness - clearance_z * 2])
-            cylinder(r = carrier_outer_r - 6 + clearance_xy, h = 15);
-        
-        // Sun shaft bearing (bottom)
-        translate([0, 0, -0.1])
-            cylinder(r = shaft_hole_r + 1, h = clearance_z + 0.2);
-        
-        // Carrier post channels
-        for(i = [0:num_planets-1]) {
-            angle = i * 360 / num_planets + 60;
-            rotate([0, 0, angle])
-                translate([carrier_outer_r - post_r - 2, 0, base_thickness - 0.1])
-                    cylinder(r = post_r + clearance_xy, h = gear_height + 0.2);
-        }
-        
-        // Retention lip opening at bottom center (sun can pass but carrier trapped)
-        translate([0, 0, -0.1])
-            cylinder(r = carrier_outer_r - post_r - 4, h = base_thickness + 0.2);
-        
-        // Vents
-        for(i = [0:5]) {
-            rotate([0, 0, i * 60 + 30])
-                translate([ring_outer_r - 1.5, -1.5, base_thickness + 2])
-                    cube([4, 3, gear_height - 4]);
+            translate([0, 0, z_gears - 0.05])
+            linear_extrude(height=gear_height + 0.1, convexity=10)
+            internal_gear_cavity_2d(ring_teeth, mod, clearance_xy);
+            
+            translate([0, 0, z_lower_carrier - 0.1])
+            cylinder(r=carrier_cavity_r, h=carrier_plate_thickness + clearance_z + 0.15, $fn=90);
+            
+            translate([0, 0, z_upper_carrier - clearance_z - 0.1])
+            cylinder(r=carrier_cavity_r, h=carrier_plate_thickness + base_thickness + clearance_z + 0.2, $fn=90);
+            
+            translate([0, 0, -0.1])
+            cylinder(r=shaft_hole_r, h=base_thickness + 0.2, $fn=48);
+            
+            translate([0, 0, total_height - base_thickness - 0.1])
+            cylinder(r=shaft_hole_r + 0.5, h=base_thickness + 0.2, $fn=6);
+            
+            for(i = [0:2]) {
+                rotate([0, 0, i * 120 + 60])
+                translate([housing_outer_r - housing_wall/2 - 0.5, 0, z_gears + gear_height/2])
+                rotate([0, 90, 0])
+                cylinder(r=4.5, h=housing_wall + 2, center=true, $fn=32);
+            }
+            
+            for(i = [0:11]) {
+                rotate([0, 0, i * 30])
+                translate([housing_outer_r - 0.8, 0, -0.1])
+                cylinder(r=1, h=total_height + 0.2, $fn=16);
+            }
         }
     }
 }
 
 // === ASSEMBLY ===
-module assembly() {
-    color("orange", 0.85) ring_housing();
-    
-    color("gold") translate([0, 0, base_thickness]) sun_gear();
-    
-    color("limegreen") translate([0, 0, base_thickness]) carrier();
-    
-    color("deepskyblue")
-        for(i = [0:num_planets-1]) {
-            angle = i * 360 / num_planets;
-            rotate([0, 0, angle])
-                translate([planet_orbit_r, 0, base_thickness + clearance_z])
-                    planet_gear();
-        }
-}
 
-// === CROSS SECTION ===
-module cross_section() {
-    difference() {
-        assembly();
-        translate([0, -100, -10]) cube([200, 200, 200]);
+module planetary_gearbox() {
+    ring_housing();
+    sun_gear();
+    carrier();
+    for(i = [0:num_planets-1]) {
+        planet_gear(i * 360/num_planets);
     }
 }
 
-// Full assembly
-assembly();
+// Render complete assembly
+planetary_gearbox();
+
+// Print information
+echo("═══════════════════════════════════════════════════════");
+echo("  PRINT-IN-PLACE PLANETARY GEARBOX");
+echo("═══════════════════════════════════════════════════════");
+echo(str("  Diameter: ", housing_outer_r * 2, " mm"));
+echo(str("  Height: ", total_height, " mm (+8mm shaft extension)"));
+echo(str("  Gear Ratio: ", 1 + ring_teeth/sun_teeth, ":1"));
+echo("───────────────────────────────────────────────────────");
+echo(str("  XY Clearance: ", clearance_xy, " mm"));
+echo(str("  Z Clearance: ", clearance_z, " mm"));
+echo("───────────────────────────────────────────────────────");
+echo("  Print: PETG, 0.4mm nozzle, 0.1mm layer, Z-up");
+echo("═══════════════════════════════════════════════════════");

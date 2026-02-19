@@ -1,215 +1,273 @@
 // 3D Printer Torture Test Model
-// Tests: holes, pins, thin walls, bridges, overhangs
-// Size: approximately 100mm x 140mm x 20mm
+// Tests: holes, pins, thin walls, bridges, overhangs, stringing, dimensional accuracy
 
 $fn = 64;
 
-// ==================== HOLES SECTION ====================
-// 10 holes from 1mm to 10mm diameter
-module holes_section() {
-    hole_diameters = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    hole_block_height = 5;
-    
-    difference() {
-        // Block for holes
-        cube([28, 32, hole_block_height]);
-        
-        // Create holes in 2 rows of 5
-        for (i = [0:4]) {
-            // First row (1-5mm)
-            translate([4 + i*5, 7, -1])
-                cylinder(d = hole_diameters[i], h = hole_block_height + 2);
-            
-            // Second row (6-10mm)
-            translate([4 + i*5, 21, -1])
-                cylinder(d = hole_diameters[i + 5], h = hole_block_height + 2);
-        }
-    }
-    
-    // Size indicators on top
-    translate([2, 1, hole_block_height])
-        linear_extrude(0.5)
-            text("1 2 3 4 5", size = 2, spacing = 1.8);
-    translate([0, 27, hole_block_height])
-        linear_extrude(0.5)
-            text("6 7 8 9 10", size = 2, spacing = 1.3);
+// Base dimensions
+base_thickness = 3;
+base_width = 150;
+base_depth = 95;
+
+// ==================== BASE PLATE ====================
+module base_plate() {
+    cube([base_width, base_depth, base_thickness]);
 }
 
-// ==================== PINS SECTION ====================
-// 10 pins from 1mm to 10mm diameter, heights 1-5mm  
+// ==================== HOLES GRID (1-10mm) ====================
+module holes_section() {
+    hole_sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    section_height = 5;
+    
+    translate([3, 3, base_thickness]) {
+        difference() {
+            // Block for holes
+            cube([62, 16, section_height]);
+            
+            // Create holes - evenly spaced
+            for (i = [0:9]) {
+                translate([4 + i * 6, 9, -1])
+                    cylinder(d = hole_sizes[i], h = section_height + 2);
+            }
+            
+            // Label engraved
+            translate([31, 2, section_height - 0.3])
+                linear_extrude(0.5)
+                    text("HOLES 1-10mm", size = 2.5, halign = "center", valign = "center");
+        }
+        
+        // Size labels on top
+        for (i = [0:9]) {
+            translate([4 + i * 6, 15, section_height])
+                linear_extrude(0.4)
+                    text(str(i+1), size = 2, halign = "center", valign = "center");
+        }
+    }
+}
+
+// ==================== PINS GRID (1-10mm diameter, varying heights) ====================
 module pins_section() {
     pin_diameters = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     pin_heights = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5];
-    base_h = 2;
     
-    // Base for pins
-    cube([28, 32, base_h]);
-    
-    // Create pins in 2 rows of 5
-    for (i = [0:4]) {
-        // First row (1-5mm diameter)
-        translate([4 + i*5, 7, base_h])
-            cylinder(d = pin_diameters[i], h = pin_heights[i]);
+    translate([72, 3, base_thickness]) {
+        // Base platform with label
+        difference() {
+            cube([62, 16, 1]);
+            translate([31, 2, 0.5])
+                linear_extrude(0.7)
+                    text("PINS 1-10mm", size = 2.5, halign = "center", valign = "center");
+        }
         
-        // Second row (6-10mm diameter)
-        translate([4 + i*5, 21, base_h])
-            cylinder(d = pin_diameters[i + 5], h = pin_heights[i + 5]);
-    }
-    
-    // Size indicators
-    translate([2, 1, base_h])
-        linear_extrude(0.5)
-            text("1 2 3 4 5", size = 2, spacing = 1.8);
-    translate([0, 27, base_h])
-        linear_extrude(0.5)
-            text("6 7 8 9 10", size = 2, spacing = 1.3);
-}
-
-// ==================== THIN WALLS SECTION ====================
-// Walls from 0.2mm to 2mm thickness
-module thin_walls_section() {
-    wall_thicknesses = [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0];
-    wall_height = 15;
-    wall_depth = 10;
-    base_h = 2;
-    spacing = 3;
-    
-    total_width = 2;
-    for (t = wall_thicknesses) total_width = total_width + t + spacing;
-    
-    // Base
-    cube([total_width, wall_depth + 6, base_h]);
-    
-    // Create walls with increasing thickness
-    x_pos = 2;
-    for (i = [0:len(wall_thicknesses)-1]) {
-        translate([x_pos, 3, base_h])
-            cube([wall_thicknesses[i], wall_depth, wall_height]);
-        x_pos = x_pos + wall_thicknesses[i] + spacing;
-    }
-}
-
-// ==================== BRIDGES SECTION ====================
-// Bridges from 5mm to 50mm length
-module bridges_section() {
-    bridge_lengths = [5, 10, 15, 20, 30, 40, 50];
-    bridge_width = 4;
-    pillar_height = 8;
-    bridge_thickness = 1.2;
-    pillar_width = 3;
-    spacing = 1.5;
-    
-    for (i = [0:len(bridge_lengths)-1]) {
-        bridge_len = bridge_lengths[i];
-        y_pos = i * (bridge_width + spacing);
+        // Create pins - evenly spaced
+        for (i = [0:9]) {
+            translate([4 + i * 6, 9, 1])
+                cylinder(d = pin_diameters[i], h = pin_heights[i]);
+        }
         
-        // Left pillar
-        translate([0, y_pos, 0])
-            cube([pillar_width, bridge_width, pillar_height]);
-        
-        // Right pillar  
-        translate([pillar_width + bridge_len, y_pos, 0])
-            cube([pillar_width, bridge_width, pillar_height]);
-        
-        // Bridge span (the actual unsupported bridge)
-        translate([pillar_width, y_pos, pillar_height - bridge_thickness])
-            cube([bridge_len, bridge_width, bridge_thickness]);
-    }
-}
-
-// ==================== OVERHANGS SECTION ====================
-// Overhangs from 10 to 70 degrees (angle from vertical)
-module overhangs_section() {
-    overhang_angles = [10, 20, 30, 40, 50, 60, 70];
-    overhang_width = 8;
-    support_height = 18;
-    overhang_length = 12;
-    thickness = 2;
-    spacing = 2;
-    
-    for (i = [0:len(overhang_angles)-1]) {
-        angle = overhang_angles[i];
-        y_pos = i * (overhang_width + spacing);
-        
-        // Vertical support pillar
-        translate([0, y_pos, 0])
-            cube([thickness, overhang_width, support_height]);
-        
-        // Angled overhang - created by rotating a block
-        translate([thickness, y_pos + overhang_width/2, support_height]) {
-            rotate([0, angle, 0])
-            translate([0, -overhang_width/2, -thickness])
-                cube([overhang_length, overhang_width, thickness]);
+        // Size labels
+        for (i = [0:9]) {
+            translate([4 + i * 6, 15, 1])
+                linear_extrude(0.4)
+                    text(str(i+1), size = 2, halign = "center", valign = "center");
         }
     }
 }
 
-// ==================== MAIN BASE AND ASSEMBLY ====================
-module torture_test() {
-    base_height = 3;
+// ==================== THIN WALLS (0.4-2mm) ====================
+module thin_walls_section() {
+    wall_thicknesses = [0.4, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0];
+    wall_height = 12;
+    wall_length = 8;
     
-    // Total base dimensions
-    base_width = 100;
-    base_depth = 140;
-    
-    // Main base plate
-    cube([base_width, base_depth, base_height]);
-    
-    // Title at top
-    translate([5, base_depth - 9, base_height])
-        linear_extrude(0.6)
-            text("3D PRINTER TORTURE TEST", size = 4);
-    
-    // Row positions
-    row1_y = 5;      // Bridges and overhangs at bottom
-    row2_y = 55;     // Thin walls in middle
-    row3_y = 90;     // Holes and pins near top
-    
-    // ===== Section 1: Holes (upper left) =====
-    translate([5, row3_y, base_height]) {
-        holes_section();
-    }
-    translate([5, row3_y + 33, base_height])
-        linear_extrude(0.6)
-            text("HOLES mm", size = 3);
-    
-    // ===== Section 2: Pins (upper right) =====
-    translate([50, row3_y, base_height]) {
-        pins_section();
-    }
-    translate([50, row3_y + 33, base_height])
-        linear_extrude(0.6)
-            text("PINS mm", size = 3);
-    
-    // ===== Section 3: Thin walls (middle) =====
-    translate([5, row2_y, base_height]) {
-        thin_walls_section();
-    }
-    translate([5, row2_y + 20, base_height])
-        linear_extrude(0.6)
-            text("THIN WALLS 0.2-2.0mm", size = 2.5);
-    
-    // ===== Section 4: Overhangs (right side) =====
-    translate([55, row1_y, base_height]) {
-        overhangs_section();
-    }
-    translate([75, row1_y + 72, base_height])
-        linear_extrude(0.6)
-            text("OVERHANG", size = 2.5);
-    translate([75, row1_y + 67, base_height])
-        linear_extrude(0.6)
-            text("10-70 deg", size = 2.5);
-    
-    // ===== Section 5: Bridges (bottom left) =====
-    translate([5, row1_y, base_height]) {
-        bridges_section();
-    }
-    translate([5, row1_y + 40, base_height])
-        linear_extrude(0.6)
-            text("BRIDGES 5-50mm", size = 2.5);
+    translate([3, 24, base_thickness]) {
+        // Base for walls with label
+        difference() {
+            cube([50, 13, 1]);
+            translate([25, 11, 0.5])
+                linear_extrude(0.7)
+                    text("WALLS", size = 2.5, halign = "center", valign = "center");
+        }
         
-    // Corner chamfers for easier removal from build plate
-    // (small triangles at corners)
+        // Create thin walls
+        x_pos = 3;
+        for (i = [0:6]) {
+            translate([x_pos, 1, 1])
+                cube([wall_thicknesses[i], wall_length, wall_height]);
+            x_pos = x_pos + 7;
+        }
+        
+        // Wall thickness labels on top
+        x_pos = 3;
+        for (i = [0:6]) {
+            translate([x_pos + wall_thicknesses[i]/2, wall_length/2 + 1, wall_height + 1])
+                linear_extrude(0.4)
+                    text(str(wall_thicknesses[i]), size = 2, halign = "center", valign = "center");
+            x_pos = x_pos + 7;
+        }
+    }
+}
+
+// ==================== OVERHANGS (15-75 degrees) ====================
+module overhangs_section() {
+    overhang_angles = [15, 25, 35, 45, 55, 65, 75];
+    overhang_width = 8;
+    overhang_height = 12;
+    
+    translate([58, 24, base_thickness]) {
+        // Base label
+        translate([82, 6.5, 0])
+            linear_extrude(0.5)
+                text("OVERHANG", size = 2.5, halign = "center", valign = "center", direction = "ttb");
+        
+        for (i = [0:6]) {
+            x_offset = i * 10;
+            angle = overhang_angles[i];
+            
+            translate([x_offset, 0, 0]) {
+                // Vertical support
+                cube([3, overhang_width, overhang_height]);
+                
+                // Angled overhang
+                overhang_length = 7;
+                translate([3, 0, 0])
+                    rotate([0, -angle, 0])
+                        cube([overhang_length, overhang_width, 1.5]);
+                
+                // Angle label on top
+                translate([1.5, overhang_width/2, overhang_height])
+                    linear_extrude(0.4)
+                        text(str(angle), size = 2, halign = "center", valign = "center");
+            }
+        }
+    }
+}
+
+// ==================== BRIDGES (5-50mm, select lengths) ====================
+module bridges_section() {
+    bridge_lengths = [5, 10, 15, 20, 30, 40, 50];
+    bridge_width = 4;
+    bridge_thickness = 1.5;
+    pillar_height = 8;
+    pillar_width = 3;
+    
+    translate([3, 43, base_thickness]) {
+        // Label
+        translate([0, 44, 0])
+            linear_extrude(0.5)
+                text("BRIDGES", size = 3, halign = "left", valign = "center");
+        
+        for (i = [0:6]) {
+            y_offset = i * 6;
+            
+            // Left pillar
+            translate([0, y_offset, 0])
+                cube([pillar_width, bridge_width, pillar_height]);
+            
+            // Right pillar
+            translate([pillar_width + bridge_lengths[i], y_offset, 0])
+                cube([pillar_width, bridge_width, pillar_height]);
+            
+            // Bridge span
+            translate([pillar_width, y_offset, pillar_height - bridge_thickness])
+                cube([bridge_lengths[i], bridge_width, bridge_thickness]);
+            
+            // Length label on right side
+            translate([pillar_width + bridge_lengths[i] + pillar_width + 1, y_offset + bridge_width/2, pillar_height/2])
+                linear_extrude(0.4)
+                    text(str(bridge_lengths[i]), size = 2.5, halign = "left", valign = "center");
+        }
+    }
+}
+
+// ==================== STRINGING TEST (cone array) ====================
+module stringing_test() {
+    translate([68, 43, base_thickness]) {
+        // Base with label
+        difference() {
+            cube([28, 42, 1]);
+            translate([14, 40, 0.5])
+                linear_extrude(0.7)
+                    text("STRINGING", size = 2.5, halign = "center", valign = "center");
+        }
+        
+        // Array of cones/spires for stringing test
+        for (x = [0:4]) {
+            for (y = [0:6]) {
+                translate([3 + x * 5, 3 + y * 5, 1])
+                    cylinder(d1 = 3, d2 = 0.5, h = 10);
+            }
+        }
+    }
+}
+
+// ==================== DIMENSIONAL ACCURACY TEST ====================
+module dimensional_test() {
+    translate([102, 43, base_thickness]) {
+        // Base platform
+        difference() {
+            cube([45, 45, 1]);
+            translate([22.5, 43, 0.5])
+                linear_extrude(0.7)
+                    text("ACCURACY", size = 2.5, halign = "center", valign = "center");
+        }
+        
+        // 20mm x 20mm x 10mm calibration cube
+        translate([0, 5, 1]) {
+            difference() {
+                cube([20, 20, 10]);
+                
+                // X mark on top
+                translate([10, 10, 9.5])
+                    linear_extrude(1)
+                        text("X", size = 6, halign = "center", valign = "center");
+                
+                // Y mark on right side
+                translate([19.5, 10, 5])
+                    rotate([90, 0, 90])
+                        linear_extrude(1)
+                            text("Y", size = 6, halign = "center", valign = "center");
+                
+                // Z mark on front
+                translate([10, 0.5, 5])
+                    rotate([90, 0, 0])
+                        linear_extrude(1)
+                            text("Z", size = 6, halign = "center", valign = "center");
+            }
+        }
+        
+        // Small cylinder for roundness test
+        translate([32, 17, 1])
+            cylinder(d = 15, h = 8);
+        
+        // Labels
+        translate([10, 1, 1])
+            linear_extrude(0.5)
+                text("20x20", size = 2.5, halign = "center", valign = "center");
+        
+        translate([32, 1, 1])
+            linear_extrude(0.5)
+                text("D15", size = 2.5, halign = "center", valign = "center");
+    }
+}
+
+// ==================== TITLE ====================
+module title() {
+    translate([75, 91, base_thickness])
+        linear_extrude(0.6)
+            text("3D PRINTER TORTURE TEST", size = 4, halign = "center", valign = "center");
+}
+
+// ==================== MAIN ASSEMBLY ====================
+module torture_test() {
+    base_plate();
+    title();
+    holes_section();
+    pins_section();
+    thin_walls_section();
+    overhangs_section();
+    bridges_section();
+    stringing_test();
+    dimensional_test();
 }
 
 torture_test();

@@ -1,68 +1,70 @@
-$fn=120;
+$fn = 70;
 
-function default_norm(v) = sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+// Base mount plate that presses against the wall
+module base_plate() {
+    translate([0, -30, 0])
+        cube([6, 60, 40]);
+}
 
-module rod_between(p1, p2, r) {
-    v = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
-    len = default_norm(v);
-    if (len > 0) {
-        axis = cross([0,0,1], v);
-        axis_norm = default_norm(axis);
-        angle = acos(v[2]/len) * 180 / PI;
-        if (axis_norm < 1e-6) {
-            translate(p1)
-                cylinder(h=len, r=r, center=false);
-        } else {
-            translate(p1)
-                rotate(a=angle, v=axis)
-                    cylinder(h=len, r=r, center=false);
+// Countersunk hole for an M3 flat-head screw
+module screw_countersink() {
+    // Tapered head area ~6.4 mm diameter
+    translate([0, 0, 20])
+        rotate([0, 90, 0])
+            cylinder(h = 8, r1 = 3.3, r2 = 1.7, center = false);
+    // Shaft clearance
+    translate([0, 0, 20])
+        rotate([0, 90, 0])
+            cylinder(h = 10, r = 1.7, center = false);
+}
+
+// Curved hook formed by hulls between spheres along a path
+module hook_curve() {
+    points = [
+        [6, 0, 18],
+        [18, 0, 22],
+        [28, 0, 30],
+        [34, 0, 38],
+        [34, 0, 48]
+    ];
+
+    for (i = [0 : len(points) - 2]) {
+        hull() {
+            translate(points[i]) sphere(r = 4);
+            translate(points[i + 1]) sphere(r = 4);
         }
     }
+
+    // End caps for smooth transitions
+    translate(points[0]) sphere(r = 4);
+    translate(points[len(points) - 1]) sphere(r = 4);
 }
 
-module base_plate() {
-    union() {
-        cylinder(h=5, r=20);
-        translate([0,0,5]) cylinder(h=3, r=15);
+// Reinforcing rib supporting the hook's base
+module support_rib() {
+    hull() {
+        translate([0, -8, 12]) cube([6, 16, 12], center = false);
+        translate([6, 0, 22]) sphere(r = 4.2);
     }
 }
 
+// Triangular gusset between the plate and hook for better load transfer
 module gusset() {
     hull() {
-        translate([0,0,5]) cylinder(h=5, r=15);
-        translate([0,18,7]) rotate([80,0,0]) cylinder(h=22, r=4.5);
+        translate([0, -20, 22]) cube([6, 40, 10], center = false);
+        translate([18, 0, 30]) cube([10, 20, 12], center = true);
     }
 }
 
-module hook_arm() {
-    pts = [
-        [0,0,5],
-        [0,24,10],
-        [0,32,15],
-        [0,40,20]
-    ];
-    radii = [4.7, 4.2, 3.8];
-    union() {
-        for (i = [0 : len(radii) - 1]) {
-            rod_between(pts[i], pts[i + 1], radii[i]);
+union() {
+    difference() {
+        union() {
+            base_plate();
+            support_rib();
+            gusset();
+            hook_curve();
         }
-        for (p = pts) {
-            translate(p) sphere(r=4.2);
-        }
+        translate([0, 0, 20])
+            screw_countersink();
     }
-}
-
-module countersink() {
-    translate([0,0,0]) cylinder(h=8, r=1.6, center=false);
-    translate([0,0,5]) cylinder(h=5, r1=4.5, r2=1.6, center=false);
-}
-
-
-difference() {
-    union() {
-        base_plate();
-        gusset();
-        hook_arm();
-    }
-    countersink();
 }

@@ -1,58 +1,29 @@
-$fn=120;
+$fn=160;
 
-module rook(){
-    base();
-    body();
-    crown();
-}
-
-module base(){
-    union(){
-        translate([0,0,0])
-            cylinder(h=5, r=20);
-        translate([0,0,5])
+module rook() {
+    union() {
+        // base
+        cylinder(h=5, r=20);
+        translate([0, 0, 5])
+            cylinder(h=2, r=18);
+        
+        // body
+        translate([0, 0, 7])
+            cylinder(h=25, r1=16, r2=14);
+        translate([0, 0, 32])
             cylinder(h=3, r=18);
-        translate([0,0,8])
-            cylinder(h=2, r=17);
+        
+        // turret with crenellations
+        translate([0, 0, 35])
+            difference() {
+                cylinder(h=13, r=17);
+                for (angle = [0, 90, 180, 270]) {
+                    rotate([0, 0, angle])
+                        translate([10, -8, 0])
+                            cube([8, 16, 14], center=false);
+                }
+            }
     }
 }
 
-module body(){
-    union(){
-        translate([0,0,10])
-            cylinder(h=22, r1=16, r2=14);
-        translate([0,0,32])
-            cylinder(h=4, r=13);
-        translate([0,0,36])
-            cylinder(h=4, r1=13, r2=12);
-        translate([0,0,40])
-            cylinder(h=4, r=12);
-    }
-}
-
-module crown(){
-    union(){
-        translate([0,0,44])
-            cylinder(h=6, r=16);
-        translate([0,0,50])
-            cylinder(h=8, r=15);
-        translate([0,0,58])
-            cylinder(h=3, r=14);
-        crown_notches();
-    }
-}
-
-module crown_notches(){
-    difference(){
-        translate([0,0,50])
-            cylinder(h=11, r=15);
-        for (i=[0:5]){
-            rotate([0,0,i*60])
-                translate([0,12,51])
-                    cube([12,6,12], center=true);
-        }
-    }
-}
-
-rotate([0,0,0])
-    rook();
+rook();

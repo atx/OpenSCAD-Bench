@@ -1,92 +1,109 @@
 // 3D Printer Torture Test Model
-// Units in mm
+// Units: mm
 
-$fn=80;
+$fn = 64;
 
-module base_plate(size=[120,120,4]) {
-    cube(size, center=false);
+// Parameters
+base_size = [180, 130, 4];
+margin = 5;
+
+module base_plate() {
+    cube(base_size, center=false);
 }
 
-// Grid of holes 1-10mm diameter, spaced 12mm
-module hole_grid(origin=[0,0,0]) {
-    translate(origin)
-    for(i=[0:9]) {
-        for(j=[0:4]) {
-            d = i+1; // 1..10 mm
-            translate([i*12 + 6, j*12 + 6, 0])
-                cylinder(h=10, d=d, center=false);
+// Hole grid: diameters 1-10mm
+module hole_grid() {
+    diameters = [1,2,3,4,5,6,7,8,9,10];
+    spacing = 11; // compact spacing while avoiding overlap
+    rows = 2;
+    for (r = [0:rows-1])
+        for (i = [0:len(diameters)-1])
+            translate([margin + i*spacing, margin + 10 + r*spacing, 0])
+                cylinder(d=diameters[i], h=base_size[2]+0.5, center=false);
+}
+
+// Pins grid: diameters 1-10mm, heights 1-5mm
+module pin_grid() {
+    diameters = [1,2,3,4,5,6,7,8,9,10];
+    spacing = 11;
+    rows = 2;
+    base_height = base_size[2];
+    for (r = [0:rows-1])
+        for (i = [0:len(diameters)-1]) {
+            h = 1 + (i % 5); // cycle 1-5mm heights
+            translate([margin + i*spacing, 45 + r*spacing, base_height])
+                cylinder(d=diameters[i], h=h, center=false);
         }
+}
+
+// Thin walls from 0.2-2mm thickness
+module thin_walls() {
+    thicknesses = [0.2,0.4,0.6,0.8,1.0,1.2,1.4,1.6,1.8,2.0];
+    wall_height = 20;
+    spacing = 5;
+    start_x = margin;
+    start_y = 80;
+    for (i = [0:len(thicknesses)-1])
+        translate([start_x + i*spacing, start_y, base_size[2]])
+            cube([thicknesses[i], 18, wall_height], center=false);
+}
+
+// Bridges of 5-50mm length
+module bridges() {
+    spans = [5,10,20,30,40,50];
+    support_size = [6,6,10];
+    deck_thickness = 1;
+    gap = 0; // gap between supports and deck bottom (0 => rests on supports)
+    start_x = 118; // fits within 180mm base with max span 50
+    start_y = margin;
+    offset_y = 20;
+    for (i = [0:len(spans)-1]) {
+        span = spans[i];
+        x0 = start_x;
+        y0 = start_y + i*offset_y;
+        // left and right supports
+        translate([x0, y0, base_size[2]]) cube(support_size, center=false);
+        translate([x0 + span + support_size[0], y0, base_size[2]]) cube(support_size, center=false);
+        // bridge deck (anchored to supports)
+        translate([x0 + support_size[0], y0, base_size[2] + support_size[2] + gap])
+            cube([span, support_size[1], deck_thickness], center=false);
     }
 }
 
-// Compact grid of pins covering 1-10mm diameters, heights 1-5mm, spaced 12mm
-module pin_grid(origin=[0,0,0]) {
-    translate(origin)
-    for(row=[0:1]) { // two rows
-        for(col=[0:4]) { // five columns
-            idx = row*5 + col; // 0..9
-            d = idx + 1;      // 1..10 mm diameters
-            h = (col + row) % 5 + 1; // 1..5 mm heights
-            translate([col*12 + 6, row*12 + 6, 4])
-                cylinder(h=h, d=d, center=false);
+// Overhang angles 10-70 degrees
+module overhangs() {
+    angles = [10,20,30,40,50,60,70];
+    arm_len = 22;
+    arm_thick = 3;
+    arm_width = 12;
+    start_x = 20;
+    start_y = 105;
+    column_size = [14,14,20];
+    // column
+    translate([start_x, start_y, base_size[2]]) cube(column_size, center=false);
+    // arms
+    for (i = [0:len(angles)-1]) {
+        ang = angles[i];
+        // attach at increasing heights
+        h0 = base_size[2] + 5 + i*2;
+        translate([start_x + column_size[0], start_y, h0])
+            rotate([0, -ang, 0]) // negative rotates downward for overhang
+                cube([arm_len, arm_width, arm_thick], center=false);
+    }
+}
+
+module model() {
+    difference() {
+        union() {
+            base_plate();
+            pin_grid();
+            thin_walls();
+            bridges();
+            overhangs();
         }
+        // subtract holes through base
+        hole_grid();
     }
 }
 
-// Thin walls between 0.2-2mm thickness, 20mm long, 15mm tall
-module thin_wall_array(origin=[0,0,0]) {
-    translate(origin)
-    for(k=[0:9]) {
-        t = 0.2 + k*0.2; // 0.2 to 2.0
-        translate([k*6,0,4])
-            cube([t,20,15], center=false);
-    }
-}
-
-// Bridges of 5-50mm length in 5mm increments, 1mm thick and 5mm wide bar
-module bridge_array(origin=[0,0,0]) {
-    translate(origin)
-    for(n=[1:10]) {
-        gap = n*5; // 5..50mm
-        y = (n-1)*10;
-        // supports
-        translate([0,y,4]) cube([5,5,10], center=false);
-        translate([gap+5,y,4]) cube([5,5,10], center=false);
-        // bridge bar across
-        translate([5,y,14]) cube([gap,5,1], center=false);
-    }
-}
-
-// Overhang angles between 10-70 degrees in 10 deg steps using wedges
-module overhang_ramp(origin=[0,0,0]) {
-    translate(origin)
-    for(a=[10:10:70]) {
-        idx = a/10 -1;
-        xoff = idx*9; // compact spacing
-        len = 20;
-        h = 20;
-        translate([xoff,0,4]) rotate([0,90,0]) linear_extrude(height=len)
-            polygon(points=[[0,0],[h*tan(a),0],[0,h]]);
-        // small base strip for stability
-        translate([xoff,0,4]) cube([2, len, 2], center=false);
-    }
-}
-
-// Assemble model
-module torture_test_model(){
-    difference(){
-        base_plate();
-        // holes cut into base in left-lower section
-        hole_grid(origin=[5,5,0]);
-    }
-    // pins in left-mid area
-    pin_grid(origin=[5,65,0]);
-    // thin walls along upper-left edge
-    thin_wall_array(origin=[5,95,0]);
-    // bridges along bottom-right area
-    bridge_array(origin=[60,5,0]);
-    // overhang ramps along upper-right area
-    overhang_ramp(origin=[65,100,0]);
-}
-
-torture_test_model();
+model();
