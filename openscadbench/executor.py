@@ -447,6 +447,7 @@ EXECUTORS: list[BaseExecutor] = [
     AgentExecutor("openrouter/anthropic/claude-opus-4.6"),
     AgentExecutor("openrouter/openai/gpt-5.1-codex-max"),
     AgentExecutor("openrouter/openai/gpt-5.1-codex-mini"),
+    AgentExecutor("openrouter/openai/gpt-5.2-codex"),
 ]
 
 

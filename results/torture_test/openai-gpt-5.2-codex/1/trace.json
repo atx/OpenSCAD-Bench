@@ -1,0 +1,98 @@
+[
+  {
+    "role": "system",
+    "content": "You are an expert OpenSCAD programmer. Your task is to create a 3D model based on the\nuser's description.\n\nYou have access to the following tools:\n\n- write_scad(content): Write OpenSCAD code to the model file. Returns syntax errors if\n  any. Always provide the complete file contents\u2014this overwrites the previous version.\n\n- render_png(distance, azimuth, elevation): Render the current model from a specific\n  camera angle. Returns a PNG image.\n  - distance: Camera distance from origin (try 200-500 for typical models)\n  - azimuth: Horizontal angle in degrees (0=front, 90=right, 180=back, 270=left)\n  - elevation: Vertical angle in degrees (0=horizon, 90=top-down)\n\n- render_overview(): Render four standard views (front, back, top, isometric) as a\n  single composite image. Use this to quickly check your model from all angles.\n\n- submit(): Call this when you are satisfied with your model.\n\n## Guidelines\n\n1. Start by writing an initial version of the model, then render it to see the result.\n2. Iterate: refine the code, re-render, until satisfied.\n3. Use render_overview() periodically to verify the model looks correct from all angles.\n4. OpenSCAD uses millimeters as the default unit.\n5. When you believe the model meets the requirements, call submit().\n\nCommon OpenSCAD patterns:\n- Difference for subtracting shapes: difference() { base(); cutout(); }\n- Union for combining: union() { part1(); part2(); }\n- Linear extrude for 2D\u21923D: linear_extrude(height) square([x,y]);\n- Translate/rotate for positioning: translate([x,y,z]) rotate([rx,ry,rz]) shape();\n"
+  },
+  {
+    "role": "user",
+    "content": "Design a 3D printer torture test model. It should print as a single piece and\ninclude these features to test various aspects of 3D printer performance:\n\n * a grid of holes from 1-10mm\n * a grid of circular pins from 1-10mm, with 1-5mm of height\n * thin walls between 0.2-2mm\n * bridges of 5-50mm in length\n * overhang angles between 10-70 degrees\n\nThe model should be reasonably compact to facilitate quick printing. Use judgement\nto figure out how many of each feature to include, and how to arrange them in a way\nthat allows for easy measurement and evaluation after printing."
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_B3D8qrY1KXVwYpYpradS9EBT",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '$fn=64;\\n\\n// Base plate\\nbase_thickness = 4;\\nbase_size = [140, 120, base_thickness];\\n\\nmodule holes_grid() {\\n    // 10 holes 1-10mm in 2 rows of 5\\n    start = [10, 10];\\n    spacing = [12, 12];\\n    for (i=[0:9]) {\\n        d = i+1;\\n        x = start[0] + (i%5)*spacing[0];\\n        y = start[1] + floor(i/5)*spacing[1];\\n        translate([x,y,0]) cylinder(h=base_thickness+1, d=d, center=false);\\n    }\\n}\\n\\nmodule pins_grid() {\\n    // 10 pins 1-10mm dia, heights 1-5mm\\n    start = [10, 50];\\n    spacing = [12, 12];\\n    for (i=[0:9]) {\\n        d = i+1;\\n        h = 1 + (i%5); // 1-5mm\\n        x = start[0] + (i%5)*spacing[0];\\n        y = start[1] + floor(i/5)*spacing[1];\\n        translate([x,y,base_thickness]) cylinder(h=h, d=d, center=false);\\n    }\\n}\\n\\nmodule thin_walls() {\\n    // walls of 0.2-2mm thickness\\n    start = [80, 10];\\n    lengths = 30;\\n    heights = 20;\\n    for (i=[0:9]) {\\n        t = 0.2 + i*0.2; // 0.2 to 2.0\\n        x = start[0] + i*3;\\n        translate([x, start[1], base_thickness]) cube([t, lengths, heights], center=false);\\n    }\\n}\\n\\nmodule bridges() {\\n    // bridges lengths 5-50mm\\n    start = [80, 60];\\n    for (i=[0:9]) {\\n        len = 5 + i*5; // 5 to 50\\n        x = start[0];\\n        y = start[1] + i*5;\\n        // two pillars with bridge\\n        translate([x, y, base_thickness]) cube([3,3,20], center=false);\\n        translate([x+len, y, base_thickness]) cube([3,3,20], center=false);\\n        translate([x, y, base_thickness+20]) cube([len+3,3,2], center=false);\\n    }\\n}\\n\\nmodule overhangs() {\\n    // overhang angles 10-70 degrees\\n    start = [10, 90];\\n    for (i=[0:6]) {\\n        ang = 10 + i*10; // 10 to 70\\n        x = start[0] + i*18;\\n        // create a wedge by rotating a rectangular roof\\n        translate([x, start[1], base_thickness]) {\\n            // support block\\n            cube([10, 20, 20], center=false);\\n            // overhang roof\\n            rotate([0, -ang, 0])\\n                translate([0,0,20]) cube([20,20,2], center=false);\\n        }\\n    }\\n}\\n\\ndifference() {\\n    // base\\n    cube(base_size, center=false);\\n    // subtract holes\\n    holes_grid();\\n}\\n\\n// add features\\npins_grid();\\nthin_walls();\\nbridges();\\noverhangs();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_B3D8qrY1KXVwYpYpradS9EBT",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_mwpOf2sNmAoZIZ5jQ2eZgSKU",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_mwpOf2sNmAoZIZ5jQ2eZgSKU",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_n3Clvu4Yyv5qeT7PORMeeEcH",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 300, 'azimuth': 45, 'elevation': 30}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_n3Clvu4Yyv5qeT7PORMeeEcH",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_lXhhDPXUzzoPgPKgjm52BIQO",
+        "type": "function",
+        "function": {
+          "name": "submit",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_lXhhDPXUzzoPgPKgjm52BIQO",
+    "content": "{\"success\": true, \"message\": \"Solution submitted\"}"
+  }
+]
