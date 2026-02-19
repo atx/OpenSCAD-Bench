@@ -294,8 +294,7 @@ class SiteRenderer:
                                 )
                     except openscad.OpenSCADError as e:
                         print(f"    Trace render {i} failed: {e}")
-                        if output_path.exists():
-                            output_path.unlink()
+                        generate_invalid_placeholder(output_path)
 
     def render(self) -> None:
         """Generate the complete static site."""
