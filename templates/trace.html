@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trace Viewer - OpenSCAD Bench</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .msg-system { border-left-color: #6b7280; }
+        .msg-user { border-left-color: #22c55e; }
+        .msg-assistant { border-left-color: #3b82f6; }
+        .msg-tool-call { border-left-color: #eab308; }
+
+        pre.scad-code {
+            max-height: 70vh;
+            overflow: auto;
+        }
+
+        .code-modal {
+            display: none;
+        }
+        .code-modal.active {
+            display: flex;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <header class="p-6 border-b border-gray-700">
+        <div class="max-w-4xl mx-auto">
+            <a href="index.html" class="text-blue-400 hover:text-blue-300 text-sm">&larr; Back to results</a>
+            <h1 id="header-title" class="text-2xl font-bold mt-2">Trace Viewer</h1>
+        </div>
+    </header>
+
+    <main id="trace-container" class="max-w-4xl mx-auto p-6 space-y-4">
+        <p class="text-gray-400">Loading trace...</p>
+    </main>
+
+    <!-- Code viewer modal -->
+    <div id="code-modal" class="code-modal fixed inset-0 bg-black bg-opacity-80 items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center shrink-0">
+                <h2 class="text-lg font-bold font-mono">write_scad</h2>
+                <button onclick="closeCodeModal()" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+            <pre id="code-modal-content" class="scad-code p-4 font-mono text-sm text-gray-300 bg-gray-900 overflow-auto flex-1"></pre>
+        </div>
+    </div>
+
+    <script>
+    function openCodeModal(code) {
+        document.getElementById('code-modal-content').textContent = code;
+        document.getElementById('code-modal').classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeCodeModal() {
+        document.getElementById('code-modal').classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    document.getElementById('code-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeCodeModal();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeCodeModal();
+    });
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        const el = document.createElement('div');
+        el.textContent = str;
+        return el.innerHTML;
+    }
+
+    function parseArgs(argsStr) {
+        if (!argsStr || argsStr.trim() === '' || argsStr.trim() === '{}') return {};
+        try { return JSON.parse(argsStr); } catch(e) {}
+        // Python dict format: replace single quotes with double quotes (best-effort)
+        try { return JSON.parse(argsStr.replace(/'/g, '"')); } catch(e) {}
+        return {};
+    }
+
+    function parseWriteScadContent(argsStr) {
+        try {
+            const obj = JSON.parse(argsStr);
+            if (obj.content) return obj.content;
+        } catch(e) {}
+        // Python repr: {'content': '...code...'}
+        const match = argsStr.match(/^\{'content':\s*'([\s\S]*?)'\}$/);
+        if (match) {
+            return match[1]
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '\t')
+                .replace(/\\'/g, "'")
+                .replace(/\\\\/g, '\\');
+        }
+        return argsStr;
+    }
+
+    (async function() {
+        const params = new URLSearchParams(window.location.search);
+        const basePath = params.get('path');
+        if (!basePath) {
+            document.getElementById('trace-container').innerHTML =
+                '<p class="text-red-400">No path parameter provided.</p>';
+            return;
+        }
+
+        // Update header with path info
+        const parts = basePath.replace('assets/', '').split('/');
+        if (parts.length >= 3) {
+            document.getElementById('header-title').textContent =
+                `${parts[0]} / ${parts[1]} / Run ${parts[2]}`;
+            document.title = `Trace: ${parts[0]} / ${parts[1]} #${parts[2]}`;
+        }
+
+        let trace;
+        try {
+            const resp = await fetch(basePath + '/trace.json');
+            trace = await resp.json();
+        } catch (e) {
+            document.getElementById('trace-container').innerHTML =
+                '<p class="text-red-400">Failed to load trace.json</p>';
+            return;
+        }
+
+        const container = document.getElementById('trace-container');
+        container.innerHTML = '';
+
+        let i = 0;
+        while (i < trace.length) {
+            const msg = trace[i];
+
+            if (msg.role === 'system') {
+                // System message: collapsed by default
+                const div = document.createElement('div');
+                div.className = 'border-l-4 msg-system bg-gray-800 rounded-r-lg p-4';
+                const details = document.createElement('details');
+                details.innerHTML =
+                    '<summary class="text-xs text-gray-500 font-semibold uppercase cursor-pointer select-none">System Prompt</summary>';
+                const pre = document.createElement('pre');
+                pre.className = 'text-sm text-gray-400 whitespace-pre-wrap mt-2';
+                pre.textContent = msg.content;
+                details.appendChild(pre);
+                div.appendChild(details);
+                container.appendChild(div);
+                i++;
+                continue;
+            }
+
+            if (msg.role === 'user') {
+                const div = document.createElement('div');
+                div.className = 'border-l-4 msg-user bg-gray-800 rounded-r-lg p-4';
+                div.innerHTML = '<div class="text-xs text-green-400 font-semibold uppercase mb-2">User</div>';
+                const pre = document.createElement('pre');
+                pre.className = 'text-sm whitespace-pre-wrap';
+                pre.textContent = msg.content;
+                div.appendChild(pre);
+                container.appendChild(div);
+                i++;
+                continue;
+            }
+
+            if (msg.role === 'assistant') {
+                // Collect: optional content msg, then optional tool_calls msg, then tool results
+                const step = { content: null, toolCalls: [] };
+
+                if (!msg.tool_calls) {
+                    step.content = msg.content;
+                    i++;
+                    // Next might be a tool_calls message
+                    if (i < trace.length && trace[i].role === 'assistant' && trace[i].tool_calls) {
+                        const tcMsg = trace[i];
+                        const tcIndex = i;
+                        i++;
+                        for (const tc of tcMsg.tool_calls) {
+                            const toolResult = (i < trace.length && trace[i].role === 'tool') ? trace[i++] : null;
+                            step.toolCalls.push({ tc, tcIndex, toolResult });
+                        }
+                    }
+                } else {
+                    const tcMsg = msg;
+                    const tcIndex = i;
+                    i++;
+                    for (const tc of tcMsg.tool_calls) {
+                        const toolResult = (i < trace.length && trace[i].role === 'tool') ? trace[i++] : null;
+                        step.toolCalls.push({ tc, tcIndex, toolResult });
+                    }
+                }
+
+                // Skip empty steps (empty content, no tool calls)
+                if ((!step.content || !step.content.trim()) && step.toolCalls.length === 0) {
+                    continue;
+                }
+
+                const div = document.createElement('div');
+                div.className = 'border-l-4 msg-assistant bg-gray-800 rounded-r-lg p-4 space-y-3';
+                div.innerHTML = '<div class="text-xs text-blue-400 font-semibold uppercase mb-1">Assistant</div>';
+
+                // Content text
+                if (step.content && step.content.trim()) {
+                    const contentEl = document.createElement('div');
+                    contentEl.className = 'text-sm whitespace-pre-wrap';
+                    contentEl.textContent = step.content;
+                    div.appendChild(contentEl);
+                }
+
+                // Tool calls
+                for (const { tc, tcIndex, toolResult } of step.toolCalls) {
+                    const func = tc.function;
+                    const name = func.name;
+                    const argsStr = func.arguments || '{}';
+
+                    const tcDiv = document.createElement('div');
+                    tcDiv.className = 'border-l-4 msg-tool-call bg-gray-900 rounded-r-lg p-3 space-y-2';
+
+                    if (name === 'write_scad') {
+                        const header = document.createElement('div');
+                        header.className = 'flex items-center gap-3';
+                        header.innerHTML = '<span class="text-yellow-400 font-mono text-sm font-bold">write_scad</span>';
+                        const btn = document.createElement('button');
+                        btn.className = 'px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs font-medium transition';
+                        btn.textContent = 'View Code';
+                        btn.addEventListener('click', function() {
+                            openCodeModal(parseWriteScadContent(argsStr));
+                        });
+                        header.appendChild(btn);
+                        tcDiv.appendChild(header);
+
+                    } else if (name === 'render_png' || name === 'render_overview') {
+                        const header = document.createElement('div');
+                        header.className = 'flex items-center gap-2 flex-wrap';
+                        let label = '<span class="text-yellow-400 font-mono text-sm font-bold">' + escapeHtml(name) + '</span>';
+                        if (name === 'render_png') {
+                            const parsed = parseArgs(argsStr);
+                            label += '<span class="text-gray-500 text-xs font-mono">'
+                                + 'distance=' + (parsed.distance || '?')
+                                + ' azimuth=' + (parsed.azimuth || '?')
+                                + ' elevation=' + (parsed.elevation || '?')
+                                + '</span>';
+                        }
+                        header.innerHTML = label;
+                        tcDiv.appendChild(header);
+
+                        const imgUrl = basePath + '/trace/' + tcIndex + '.png';
+                        const link = document.createElement('a');
+                        link.href = imgUrl;
+                        link.target = '_blank';
+                        const img = document.createElement('img');
+                        img.src = imgUrl;
+                        img.className = 'rounded mt-1 max-w-xs';
+                        img.alt = name + ' result';
+                        img.onerror = function() {
+                            link.style.display = 'none';
+                            const fallback = document.createElement('div');
+                            fallback.className = 'text-gray-500 text-xs italic mt-1';
+                            fallback.textContent = 'Image not available';
+                            tcDiv.appendChild(fallback);
+                        };
+                        link.appendChild(img);
+                        tcDiv.appendChild(link);
+
+                    } else if (name === 'submit') {
+                        const header = document.createElement('div');
+                        header.className = 'flex items-center gap-2';
+                        header.innerHTML = '<span class="text-yellow-400 font-mono text-sm font-bold">submit</span>'
+                            + '<span class="text-green-400 text-xs font-medium bg-green-900 bg-opacity-30 px-2 py-0.5 rounded">Solution submitted</span>';
+                        tcDiv.appendChild(header);
+
+                    } else {
+                        const header = document.createElement('div');
+                        header.innerHTML = '<span class="text-yellow-400 font-mono text-sm font-bold">' + escapeHtml(name) + '</span>';
+                        tcDiv.appendChild(header);
+                        const argsEl = document.createElement('pre');
+                        argsEl.className = 'text-xs text-gray-400 font-mono';
+                        argsEl.textContent = argsStr;
+                        tcDiv.appendChild(argsEl);
+                    }
+
+                    // Show tool errors in red
+                    if (toolResult) {
+                        const content = toolResult.content || '';
+                        if (content.includes('"success": false') || content.includes('"error"')) {
+                            const errDiv = document.createElement('div');
+                            errDiv.className = 'text-red-400 text-xs font-mono mt-1 p-2 bg-red-900 bg-opacity-20 rounded';
+                            errDiv.textContent = content;
+                            tcDiv.appendChild(errDiv);
+                        }
+                    }
+
+                    div.appendChild(tcDiv);
+                }
+
+                container.appendChild(div);
+                continue;
+            }
+
+            // Skip orphan tool results
+            i++;
+        }
+    })();
+    </script>
+</body>
+</html>

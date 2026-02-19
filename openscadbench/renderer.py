@@ -1,5 +1,6 @@
 """Static site generator for benchmark results."""
 
+import ast
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -58,6 +59,25 @@ class RunInfo:
     started_at: str
     completed_at: str
     valid: bool
+
+
+def _parse_tool_args(args_str: str) -> dict:
+    """Parse tool arguments from trace format.
+
+    Arguments in traces are Python dict repr strings (with single quotes).
+
+    Args:
+        args_str: The raw arguments string from the trace.
+
+    Returns:
+        Parsed arguments as a dict.
+    """
+    if not args_str or not args_str.strip():
+        return {}
+    result = ast.literal_eval(args_str)
+    if isinstance(result, dict):
+        return result
+    return {}
 
 
 class SiteRenderer:
@@ -183,6 +203,100 @@ class SiteRenderer:
             generate_invalid_placeholder(invalid_png)
             return False
 
+    def generate_trace_renders(self, result: Result) -> None:
+        """Pre-render images for render_png/render_overview tool calls in the trace.
+
+        Walks the trace sequentially, tracking the current SCAD content from
+        write_scad calls. For each render_png or render_overview tool call,
+        re-renders the image using the SCAD state at that point.
+
+        Images are stored in {result_dir}/trace/{index}.png where index is the
+        trace array index of the assistant message containing the tool_calls.
+
+        Args:
+            result: The Result to generate trace renders for.
+        """
+        result_dir = result.get_result_dir(self.results_dir)
+        trace_dir = result_dir / "trace"
+
+        # First pass: find which indices need rendering (for cache check)
+        current_scad: str | None = None
+        render_indices: list[int] = []
+
+        for i, msg in enumerate(result.trace):
+            if msg.get("role") != "assistant" or not msg.get("tool_calls"):
+                continue
+            for tc in msg["tool_calls"]:
+                name = tc.get("function", {}).get("name", "")
+                if name == "write_scad":
+                    args = _parse_tool_args(tc["function"].get("arguments", "{}"))
+                    current_scad = args.get("content")
+                elif name in ("render_png", "render_overview") and current_scad is not None:
+                    render_indices.append(i)
+
+        if not render_indices:
+            return
+
+        # Cache check: skip if all expected files exist
+        if trace_dir.is_dir() and all(
+            (trace_dir / f"{idx}.png").exists() for idx in render_indices
+        ):
+            return
+
+        trace_dir.mkdir(parents=True, exist_ok=True)
+
+        # Second pass: replay and render
+        current_scad = None
+        with tempfile.TemporaryDirectory() as tmpdir:
+            scad_path = Path(tmpdir) / "model.scad"
+
+            for i, msg in enumerate(result.trace):
+                if msg.get("role") != "assistant" or not msg.get("tool_calls"):
+                    continue
+
+                for tc in msg["tool_calls"]:
+                    func = tc.get("function", {})
+                    name = func.get("name", "")
+                    args_str = func.get("arguments", "{}")
+
+                    if name == "write_scad":
+                        args = _parse_tool_args(args_str)
+                        current_scad = args.get("content")
+                        if current_scad is not None:
+                            scad_path.write_text(current_scad)
+
+                if i not in render_indices:
+                    continue
+
+                output_path = trace_dir / f"{i}.png"
+                if output_path.exists():
+                    continue
+
+                # Re-render the tool call from this message
+                for tc in msg["tool_calls"]:
+                    func = tc.get("function", {})
+                    name = func.get("name", "")
+                    if name not in ("render_png", "render_overview"):
+                        continue
+
+                    args = _parse_tool_args(func.get("arguments", "{}"))
+                    try:
+                        with open(output_path, "wb") as f:
+                            if name == "render_overview":
+                                openscad.render_overview(scad_path, f)
+                            else:
+                                openscad.render_png(
+                                    scad_path,
+                                    f,
+                                    distance=float(args.get("distance", 300)),
+                                    azimuth=float(args.get("azimuth", 45)),
+                                    elevation=float(args.get("elevation", 25)),
+                                )
+                    except openscad.OpenSCADError as e:
+                        print(f"    Trace render {i} failed: {e}")
+                        if output_path.exists():
+                            output_path.unlink()
+
     def render(self) -> None:
         """Generate the complete static site."""
         print(f"Discovering results in {self.results_dir}...")
@@ -198,6 +312,8 @@ class SiteRenderer:
             result_validity[key] = valid
             if not valid:
                 print(f"  Marked as invalid")
+            print(f"  Generating trace renders...")
+            self.generate_trace_renders(result)
 
         # Build matrix data structure from ALL results
         agents = sorted(set(r.agent_id for r in results))
@@ -273,6 +389,14 @@ class SiteRenderer:
                 if src.exists():
                     shutil.copy2(src, dest_dir / "invalid.png")
 
+            # Copy trace render images
+            trace_src = result_dir / "trace"
+            if trace_src.is_dir():
+                trace_dest = dest_dir / "trace"
+                trace_dest.mkdir(parents=True, exist_ok=True)
+                for png_file in trace_src.glob("*.png"):
+                    shutil.copy2(png_file, trace_dest / png_file.name)
+
         # Render index.html
         print("Rendering index.html...")
         template = self.env.get_template("index.html")
@@ -283,5 +407,9 @@ class SiteRenderer:
             benchmark_max_runs=benchmark_max_runs,
         )
         (self.output_dir / "index.html").write_text(html)
+
+        # Copy trace.html (static file, no Jinja rendering needed)
+        print("Copying trace.html...")
+        shutil.copy2(self.templates_dir / "trace.html", self.output_dir / "trace.html")
 
         print(f"Site generated at {self.output_dir}/")

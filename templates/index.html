@@ -320,7 +320,7 @@
 
             document.getElementById('modal-title').textContent =
                 `${benchmarkId} / ${agentId} / Run ${runId}`;
-            document.getElementById('modal-trace-link').href = `${basePath}/trace.json`;
+            document.getElementById('modal-trace-link').href = `trace.html?path=${basePath}`;
             document.getElementById('modal-scad-link').href = `${basePath}/solution.scad`;
             document.getElementById('modal-stl-link').href = `${basePath}/solution.stl`;
             document.getElementById('modal-prompt').textContent = PROMPTS[benchmarkId] || '';
