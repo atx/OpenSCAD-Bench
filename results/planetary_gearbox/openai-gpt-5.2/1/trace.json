@@ -1,0 +1,296 @@
+[
+  {
+    "role": "system",
+    "content": "You are an expert OpenSCAD programmer. Your task is to create a 3D model based on the\nuser's description.\n\nYou have access to the following tools:\n\n- write_scad(content): Write OpenSCAD code to the model file. Returns syntax errors if\n  any. Always provide the complete file contents\u2014this overwrites the previous version.\n\n- render_png(distance, azimuth, elevation): Render the current model from a specific\n  camera angle. Returns a PNG image.\n  - distance: Camera distance from origin (try 200-500 for typical models)\n  - azimuth: Horizontal angle in degrees (0=front, 90=right, 180=back, 270=left)\n  - elevation: Vertical angle in degrees (0=horizon, 90=top-down)\n\n- render_overview(): Render four standard views (front, back, top, isometric) as a\n  single composite image. Use this to quickly check your model from all angles.\n\n- submit(): Call this when you are satisfied with your model.\n\n## Guidelines\n\n1. Start by writing an initial version of the model, then render it to see the result.\n2. Iterate: refine the code, re-render, until satisfied.\n3. Use render_overview() periodically to verify the model looks correct from all angles.\n4. OpenSCAD uses millimeters as the default unit.\n5. When you believe the model meets the requirements, call submit().\n\nCommon OpenSCAD patterns:\n- Difference for subtracting shapes: difference() { base(); cutout(); }\n- Union for combining: union() { part1(); part2(); }\n- Linear extrude for 2D\u21923D: linear_extrude(height) square([x,y]);\n- Translate/rotate for positioning: translate([x,y,z]) rotate([rx,ry,rz]) shape();\n"
+  },
+  {
+    "role": "user",
+    "content": "Design a print-in-place planetary gearbox that rotates freely immediately after\nprinting with no post-processing.\n\nThis gearbox should have a single stage with three planet gears orbiting a\ncentral sun gear, all enclosed within an outer ring gear.\n\nPRINTING CONSTRAINTS:\n- Material: PETG\n- Nozzle: 0.4mm\n- Layer height: 0.1mm\n- Print orientation: Gear axis vertical (Z-up)\n\nThe mechanism must be designed so all moving parts (sun, planets, carrier)\nare captured but free to rotate after printing. Ensure bridge surfaces are\nsupported or self-supporting (no overhangs exceeding 45\u00b0). Ensure that adequate\nclearances are provided between all moving parts to prevent fusion during printing."
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_BB8L1SniyMcKH87ux4WPdJr2",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': \"// Print-in-place single-stage planetary gearbox (PETG, 0.4 nozzle, 0.1 layer)\\n// Axis vertical (Z-up). Designed for supportless printing (<=45deg overhangs).\\n// Units: mm\\n\\n$fn = 120;\\n\\n// ---------------------- Parameters ----------------------\\n// Gear geometry\\nm = 1.2;                    // gear module (mm)\\npressure_angle = 20;        // degrees\\nz_sun = 12;\\nz_planet = 12;\\nz_ring = z_sun + 2*z_planet; // required for planetary\\nplanets = 3;\\n\\ngear_h = 8;\\n\\n// Print-in-place clearances (tuned for PETG)\\nclear_xy = 0.35;            // radial clearance between moving parts\\nclear_z  = 0.30;            // axial clearance between moving parts\\nbacklash = 0.25;            // backlash along pitch circle (mm)\\n\\n// Housing / carrier layout\\nbottom_thick = 2.0;\\ncarrier_thick = 2.4;\\n\\n// Top retainers (self-supporting via 45deg tapers)\\nlip_h = 2.5;                // height of housing inward chamfer lip\\nlip_inset = 2.2;            // how far the lip constricts the opening\\n\\n// Shafts / pins\\npost_r = 3.0;               // fixed center post radius\\npin_r  = 2.2;               // planet pin shaft radius\\nhead_h = 2.0;               // conical head height (45deg)\\n\\n// Wall thickness\\nwall = 3.0;\\n\\n// ---------------------- Helper Math (radians) ----------------------\\nPI2 = 2*PI;\\n\\nfunction rad(a) = a*PI/180;\\nfunction deg(a) = a*180/PI;\\nfunction cosr(a) = cos(deg(a));\\nfunction sinr(a) = sin(deg(a));\\nfunction atanr(x) = atan(x)*PI/180;\\nfunction atan2r(y,x) = atan2(y,x)*PI/180;\\n\\nfunction rot2(p, a) = [ p[0]*cosr(a) - p[1]*sinr(a), p[0]*sinr(a) + p[1]*cosr(a) ];\\n\\n// Involute parameter for given radius\\nfunction involute_t(rb, r) = (r <= rb) ? 0 : sqrt((r*r)/(rb*rb) - 1);\\nfunction involute_theta(t) = t - atanr(t); // radians\\n\\nfunction involute_xy(rb, r) =\\n    let(t = involute_t(rb, r), th = involute_theta(t))\\n    [ r*cosr(th), r*sinr(th) ];\\n\\nfunction arc_points(r, a0, a1, n) = [\\n    for (i=[0:n])\\n        let(a = a0 + (a1-a0)*i/n)\\n        [ r*cosr(a), r*sinr(a) ]\\n];\\n\\n// ---------------------- Involute gear 2D ----------------------\\n// Generates a 2D external gear outline as a union of teeth + root circle.\\n// addendum and dedendum are radial, in mm.\\nmodule gear2d_external(teeth, module_size, pa_deg=20, addendum=undef, dedendum=undef, backlash_mm=0.0, inv_steps=10, arc_steps=6) {\\n    rp = module_size*teeth/2;\\n    pa = rad(pa_deg);\\n\\n    add = (addendum == undef) ? module_size : addendum;\\n    ded = (dedendum == undef) ? 1.25*module_size : dedendum;\\n\\n    // Standard radii\\n    rb = rp*cos(pa_deg); // base circle radius (cos() uses degrees)\\n    ra = rp + add;\\n    rf = max(0.2, rp - ded);\\n\\n    // tooth thickness at pitch circle\\n    tooth_thickness = PI*module_size/2 - backlash_mm;\\n    half_ang = tooth_thickness/(2*rp); // radians\\n\\n    // involute angle at pitch\\n    tp = involute_t(rb, rp);\\n    thp = involute_theta(tp);\\n\\n    // rotate involute so that at pitch it meets +/- half_ang\\n    rot = half_ang - thp; // radians\\n\\n    start_r = max(rb, rf);\\n\\n    // base involute sample points (unrotated, +y side)\\n    base_pts = [\\n        for (i=[0:inv_steps])\\n            let(r = start_r + (ra-start_r)*i/inv_steps)\\n                involute_xy(rb, r)\\n    ];\\n\\n    // right / left flank points\\n    right_pts = [ for (p=base_pts) rot2(p, +rot) ];\\n    left_pts  = [ for (p=base_pts) rot2([p[0], -p[1]], -rot) ];\\n\\n    // flank start angles at root (for radial segment if rf < rb)\\n    a_root_r = +rot;\\n    a_root_l = -rot;\\n\\n    // end angles at outer radius (compute from last flank points)\\n    pr = right_pts[len(right_pts)-1];\\n    pl = left_pts[len(left_pts)-1];\\n    a_outer_r = atan2r(pr[1], pr[0]);\\n    a_outer_l = atan2r(pl[1], pl[0]);\\n\\n    // Build one tooth polygon (CCW)\\n    tooth_poly = concat(\\n        // root radial start on right\\n        (rf < start_r) ? [[ rf*cosr(a_root_r), rf*sinr(a_root_r) ], [ start_r*cosr(a_root_r), start_r*sinr(a_root_r) ]] : [[ rf*cosr(a_root_r), rf*sinr(a_root_r) ]],\\n        // right involute up\\n        right_pts,\\n        // outer arc right->left\\n        arc_points(ra, a_outer_r, a_outer_l, arc_steps),\\n        // left involute down (reverse)\\n        [ for (i=[len(left_pts)-1:-1:0]) left_pts[i] ],\\n        // root radial back to left root\\n        (rf < start_r) ? [[ start_r*cosr(a_root_l), start_r*sinr(a_root_l) ], [ rf*cosr(a_root_l), rf*sinr(a_root_l) ]] : [],\\n        // root arc left->right\\n        arc_points(rf, a_root_l, a_root_r, arc_steps)\\n    );\\n\\n    union() {\\n        // teeth\\n        for (i=[0:teeth-1])\\n            rotate(i*360/teeth)\\n                polygon(points=tooth_poly);\\n        // root fill\\n        circle(r=rf);\\n    }\\n}\\n\\n// A 2D internal gear ring: outer circle minus a gear-shaped hole.\\n// The hole is generated by an external gear with swapped add/ded to approximate internal tooth form.\\nmodule ring2d_internal(teeth, module_size, pa_deg=20, wall_thickness=3, backlash_mm=0.25) {\\n    rp = module_size*teeth/2;\\n\\n    add_int = module_size;\\n    ded_int = 1.25*module_size;\\n\\n    // Inner boundary radii of an internal gear (material teeth point inward):\\n    r_hole_max = rp + ded_int; // at tooth roots (largest hole radius)\\n    r_hole_min = rp - add_int; // at tooth tips (smallest hole radius)\\n\\n    // Outer radius of housing ring\\n    r_outer = r_hole_max + wall_thickness;\\n\\n    difference() {\\n        circle(r=r_outer);\\n        // gear-shaped hole approximating internal gear\\n        gear2d_external(\\n            teeth=teeth,\\n            module_size=module_size,\\n            pa_deg=pa_deg,\\n            addendum=ded_int,      // swapped\\n            dedendum=add_int,      // swapped\\n            backlash_mm=backlash_mm\\n        );\\n    }\\n}\\n\\n// ---------------------- 3D parts ----------------------\\nmodule gear_external_3d(teeth, bore_r, z0, h, module_size=m, pa_deg=pressure_angle, backlash_mm=backlash) {\\n    translate([0,0,z0])\\n    difference() {\\n        linear_extrude(height=h)\\n            gear2d_external(teeth, module_size, pa_deg=pa_deg, backlash_mm=backlash_mm);\\n        // bore (vertical, supportless)\\n        translate([0,0,-0.2]) cylinder(h=h+0.4, r=bore_r);\\n    }\\n}\\n\\nmodule planet_gear(pos, z0) {\\n    translate([pos[0], pos[1], 0])\\n        gear_external_3d(z_planet, bore_r=pin_r+clear_xy, z0=z0, h=gear_h);\\n}\\n\\nmodule sun_gear(z0) {\\n    gear_external_3d(z_sun, bore_r=post_r+clear_xy, z0=z0, h=gear_h);\\n}\\n\\nmodule carrier(z0) {\\n    // Carrier disc under the gears; pins fixed to carrier; carrier rotates around fixed post.\\n    rp_s = m*z_sun/2;\\n    rp_p = m*z_planet/2;\\n    center_dist = rp_s + rp_p;\\n\\n    // Keep carrier within ring; provide clearance to ring teeth\\n    rp_ring = m*z_ring/2;\\n    r_ring_tip = rp_ring - m; // approx ring tooth tip radius\\n\\n    carrier_r = min(r_ring_tip - 1.2, center_dist + (m*z_planet/2 + m) + 1.0);\\n\\n    // z positions\\n    z_disc = z0;\\n    z_disc_top = z0 + carrier_thick;\\n\\n    // pin heights\\n    z_pin0 = z_disc_top; \\n    pin_shaft_h = ( (z_gears + gear_h) - z_pin0 ) + clear_z; // up to just above gear top\\n\\n    union() {\\n        // disc with center bearing hole\\n        translate([0,0,z_disc])\\n        difference() {\\n            cylinder(h=carrier_thick, r=carrier_r);\\n            // center hole around post\\n            translate([0,0,-0.2]) cylinder(h=carrier_thick+0.4, r=post_r+clear_xy);\\n        }\\n\\n        // lightening cutouts (avoid huge flat area, also reduces drag)\\n        translate([0,0,z_disc+0.4])\\n        difference() {\\n            // nothing: used as a subtraction volume in main union context isn't easy\\n        }\\n\\n        // pins + 45deg conical heads capturing planets\\n        for (i=[0:planets-1]) {\\n            ang = i*360/planets;\\n            x = center_dist*cos(ang);\\n            y = center_dist*sin(ang);\\n\\n            // pin shaft\\n            translate([x,y,z_pin0]) cylinder(h=pin_shaft_h, r=pin_r);\\n\\n            // conical head begins above planet top by clear_z (self-supporting)\\n            translate([x,y,z_gears + gear_h + clear_z])\\n                cylinder(h=head_h, r1=pin_r, r2=pin_r+head_h);\\n        }\\n\\n        // small top rim on carrier for easy handling (stays below gears)\\n        rim_r1 = carrier_r - 1.0;\\n        rim_r2 = carrier_r;\\n        translate([0,0,z_disc_top])\\n            difference() {\\n                cylinder(h=1.2, r=rim_r2);\\n                cylinder(h=1.2, r=rim_r1);\\n            }\\n    }\\n}\\n\\nmodule housing() {\\n    rp_ring = m*z_ring/2;\\n    add_int = m;\\n    ded_int = 1.25*m;\\n    r_hole_max = rp_ring + ded_int; // max radius of gear-shaped hole\\n    r_outer = r_hole_max + wall;\\n\\n    // Inner clearance cylinder below/above gear teeth (smooth walls so nothing snags)\\n    // Must be slightly larger than r_hole_max to avoid rubbing on tooth roots.\\n    r_cavity = r_hole_max + 0.6;\\n\\n    difference() {\\n        // Outer body\\n        union() {\\n            // Bottom plate\\n            cylinder(h=bottom_thick, r=r_outer);\\n\\n            // Main outer wall up to top\\n            translate([0,0,bottom_thick])\\n                cylinder(h=z_total-bottom_thick, r=r_outer);\\n\\n            // Fixed center post + 45deg conical head (captures sun & carrier)\\n            // Post shaft\\n            translate([0,0,0])\\n                cylinder(h=z_lip_start, r=post_r);\\n            // Conical head (45deg)\\n            translate([0,0,z_lip_start])\\n                cylinder(h=lip_h, r1=post_r, r2=post_r+lip_h);\\n        }\\n\\n        // Hollow interior cavity (below gear teeth)\\n        translate([0,0,bottom_thick])\\n            cylinder(h=z_gears-bottom_thick, r=r_cavity);\\n\\n        // Gear tooth region: subtract internal gear-shaped hole\\n        translate([0,0,z_gears])\\n            linear_extrude(height=gear_h)\\n                gear2d_external(\\n                    teeth=z_ring,\\n                    module_size=m,\\n                    pa_deg=pressure_angle,\\n                    addendum=ded_int,\\n                    dedendum=add_int,\\n                    backlash_mm=backlash+0.15\\n                );\\n\\n        // Upper cavity above gear teeth (so gears don't rub the top lip during rotation)\\n        translate([0,0,z_gears+gear_h])\\n            cylinder(h=(z_total-(z_gears+gear_h)), r=r_cavity);\\n\\n        // Self-supporting inward chamfer lip to retain planets/carrier\\n        // Implemented by subtracting a conical frustum so the remaining material forms the lip.\\n        translate([0,0,z_lip_start])\\n            cylinder(h=lip_h+0.02, r1=r_cavity, r2=r_cavity - lip_inset);\\n\\n        // Anti-elephant-foot chamfer on inner bottom edge\\n        translate([0,0,bottom_thick-0.01])\\n            cylinder(h=1.0, r1=r_cavity+0.8, r2=r_cavity);\\n    }\\n}\\n\\n// ---------------------- Assembly Z layout ----------------------\\n// Compute once for all modules\\nz_carrier = bottom_thick + clear_z;\\nz_gears   = z_carrier + carrier_thick + clear_z;\\nz_lip_start = z_gears + gear_h + clear_z;\\nz_total = z_lip_start + lip_h;\\n\\n// ---------------------- Assembly ----------------------\\nmodule planetary_gearbox() {\\n    rp_s = m*z_sun/2;\\n    rp_p = m*z_planet/2;\\n    center_dist = rp_s + rp_p;\\n\\n    // planet centers\\n    planet_pos = [ for (i=[0:planets-1]) [ center_dist*cos(i*360/planets), center_dist*sin(i*360/planets) ] ];\\n\\n    // Build the full print-in-place mechanism as separate solids with clearances\\n    union() {\\n        housing();\\n        carrier(z_carrier);\\n        sun_gear(z_gears);\\n        for (p=planet_pos) planet_gear(p, z_gears);\\n    }\\n}\\n\\nplanetary_gearbox();\\n\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_BB8L1SniyMcKH87ux4WPdJr2",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_CgNGZtFmP28kH24CMQlRPqOQ",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_CgNGZtFmP28kH24CMQlRPqOQ",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_XvYzyOyx07zIRNyPZ21uYNp1",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 320, 'azimuth': 35, 'elevation': 25}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_XvYzyOyx07zIRNyPZ21uYNp1",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_AevBohfQW9b5RT2fYUMmNukX",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_AevBohfQW9b5RT2fYUMmNukX",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_6OwZc0iscbiahRLS97Y9e3Tj",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// Print-in-place single-stage planetary gearbox (PETG, 0.4 nozzle, 0.1mm layer)\\n// Axis vertical (Z-up). Designed for supportless printing (<=45\u00b0 overhangs).\\n// All moving parts are captive with built-in clearances.\\n// Units: mm\\n\\n$fn = 140;\\n\\n// ---------------------- Parameters ----------------------\\n// Gear set\\nm = 1.2;                    // module\\npressure_angle = 20;        // degrees\\nz_sun = 12;\\nz_planet = 12;\\nz_ring = z_sun + 2*z_planet; // planetary constraint\\nplanets = 3;\\n\\ng ear_h = 8; // (typo guard; overwritten below)\\ngear_h = 8;\\n\\n// Print-in-place clearances (PETG)\\nclear_xy = 0.35;            // radial clearance for bearings/bores\\nclear_z  = 0.30;            // axial clearance between stacked parts\\nbacklash = 0.30;            // tooth backlash (mm) for free-running gears\\n\\n// Housing / carrier\\nbottom_thick  = 2.0;\\ncarrier_thick = 2.4;\\n\\n// Top retainers (self-supporting)\\nlip_h     = 2.6;            // vertical height of top constriction region\\nlip_inset = 2.6;            // radial inset (lip_inset ~= lip_h gives ~45\u00b0 wall)\\n\\n// Shafts / pins\\npost_r = 3.0;               // fixed center post radius\\npin_r  = 2.2;               // planet pin shaft radius\\nhead_h = 2.0;               // pin head (cone) height => 45\u00b0 when dr=head_h\\n\\n// Wall thickness\\nwall = 3.0;\\n\\n// ---------------------- Helper math (radians) ----------------------\\nfunction deg(a) = a*180/PI;\\nfunction cosr(a) = cos(deg(a));\\nfunction sinr(a) = sin(deg(a));\\nfunction atanr(x) = atan(x)*PI/180;\\nfunction atan2r(y,x) = atan2(y,x)*PI/180;\\n\\nfunction rot2(p, a) = [ p[0]*cosr(a) - p[1]*sinr(a), p[0]*sinr(a) + p[1]*cosr(a) ];\\n\\nfunction involute_t(rb, r) = (r <= rb) ? 0 : sqrt((r*r)/(rb*rb) - 1);\\nfunction involute_theta(t) = t - atanr(t); // radians\\nfunction involute_xy(rb, r) = let(t=involute_t(rb,r), th=involute_theta(t)) [ r*cosr(th), r*sinr(th) ];\\n\\nfunction arc_points(r, a0, a1, n) = [\\n    for (i=[0:n])\\n        let(a = a0 + (a1-a0)*i/n)\\n        [ r*cosr(a), r*sinr(a) ]\\n];\\n\\n// ---------------------- Involute gear 2D (external) ----------------------\\n// A practical involute approximation suitable for FDM.\\nmodule gear2d_external(teeth, module_size, pa_deg=20,\\n                       addendum=undef, dedendum=undef,\\n                       backlash_mm=0.0,\\n                       inv_steps=10, arc_steps=7) {\\n    rp = module_size*teeth/2;\\n\\n    add = (addendum == undef) ? module_size : addendum;\\n    ded = (dedendum == undef) ? 1.25*module_size : dedendum;\\n\\n    rb = rp*cos(pa_deg);      // base radius\\n    ra = rp + add;            // outer radius\\n    rf = max(0.25, rp - ded); // root radius\\n\\n    // tooth thickness at pitch circle\\n    tooth_thickness = PI*module_size/2 - backlash_mm;\\n    half_ang = tooth_thickness/(2*rp); // radians\\n\\n    // involute polar angle at pitch\\n    tp = involute_t(rb, rp);\\n    thp = involute_theta(tp);\\n\\n    rot = half_ang - thp;     // radians\\n\\n    start_r = max(rb, rf);\\n\\n    base_pts = [\\n        for (i=[0:inv_steps])\\n            let(r = start_r + (ra-start_r)*i/inv_steps)\\n                involute_xy(rb, r)\\n    ];\\n\\n    right_pts = [ for (p=base_pts) rot2(p, +rot) ];\\n    left_pts  = [ for (p=base_pts) rot2([p[0], -p[1]], -rot) ];\\n\\n    a_root_r = +rot;\\n    a_root_l = -rot;\\n\\n    pr = right_pts[len(right_pts)-1];\\n    pl = left_pts[len(left_pts)-1];\\n    a_outer_r = atan2r(pr[1], pr[0]);\\n    a_outer_l = atan2r(pl[1], pl[0]);\\n\\n    tooth_poly = concat(\\n        // right root -> start\\n        (rf < start_r) ? [[ rf*cosr(a_root_r), rf*sinr(a_root_r) ], [ start_r*cosr(a_root_r), start_r*sinr(a_root_r) ]] : [[ rf*cosr(a_root_r), rf*sinr(a_root_r) ]],\\n        // right involute up\\n        right_pts,\\n        // outer arc\\n        arc_points(ra, a_outer_r, a_outer_l, arc_steps),\\n        // left involute down\\n        [ for (i=[len(left_pts)-1:-1:0]) left_pts[i] ],\\n        // left start -> root\\n        (rf < start_r) ? [[ start_r*cosr(a_root_l), start_r*sinr(a_root_l) ], [ rf*cosr(a_root_l), rf*sinr(a_root_l) ]] : [],\\n        // root arc\\n        arc_points(rf, a_root_l, a_root_r, arc_steps)\\n    );\\n\\n    union() {\\n        for (i=[0:teeth-1])\\n            rotate(i*360/teeth)\\n                polygon(points=tooth_poly);\\n        circle(r=rf);\\n    }\\n}\\n\\n// ---------------------- 3D gear ----------------------\\nmodule gear_external_3d(teeth, bore_r, z0, h,\\n                        module_size=m, pa_deg=pressure_angle,\\n                        backlash_mm=backlash) {\\n    translate([0,0,z0])\\n    difference() {\\n        linear_extrude(height=h)\\n            gear2d_external(teeth, module_size, pa_deg=pa_deg, backlash_mm=backlash_mm);\\n        translate([0,0,-0.25]) cylinder(h=h+0.5, r=bore_r);\\n    }\\n}\\n\\n// ---------------------- Assembly Z layout ----------------------\\nz_carrier   = bottom_thick + clear_z;\\nz_gears     = z_carrier + carrier_thick + clear_z;\\nz_gear_top  = z_gears + gear_h;\\nz_lip_start = z_gear_top + clear_z;\\nz_total     = z_lip_start + lip_h;\\n\\n// ---------------------- Parts ----------------------\\nmodule sun_gear() {\\n    gear_external_3d(z_sun, bore_r=post_r+clear_xy, z0=z_gears, h=gear_h);\\n}\\n\\nmodule planet_gear(pos) {\\n    translate([pos[0], pos[1], 0])\\n        gear_external_3d(z_planet, bore_r=pin_r+clear_xy, z0=z_gears, h=gear_h);\\n}\\n\\nmodule carrier() {\\n    rp_s = m*z_sun/2;\\n    rp_p = m*z_planet/2;\\n    center_dist = rp_s + rp_p;\\n\\n    rp_ring = m*z_ring/2;\\n    r_ring_tip = rp_ring - m; // approx internal ring tooth tip radius\\n\\n    // Carrier radius (kept well inside ring tooth tip radius)\\n    carrier_r = r_ring_tip - 1.2;\\n\\n    z_disc = z_carrier;\\n    z_disc_top = z_disc + carrier_thick;\\n\\n    // Pin shaft ends just above gear top (before the conical head starts)\\n    z_pin0 = z_disc_top;\\n    pin_shaft_h = (z_gear_top - z_pin0) + clear_z;\\n\\n    union() {\\n        // Disc (bearing hole around fixed post)\\n        translate([0,0,z_disc])\\n        difference() {\\n            cylinder(h=carrier_thick, r=carrier_r);\\n            translate([0,0,-0.25]) cylinder(h=carrier_thick+0.5, r=post_r+clear_xy);\\n        }\\n\\n        // Pins + 45\u00b0 conical heads (capture planets)\\n        for (i=[0:planets-1]) {\\n            ang = i*360/planets;\\n            x = center_dist*cos(ang);\\n            y = center_dist*sin(ang);\\n\\n            // shaft\\n            translate([x,y,z_pin0]) cylinder(h=pin_shaft_h, r=pin_r);\\n\\n            // head begins above planet top by clear_z\\n            translate([x,y,z_gear_top + clear_z])\\n                cylinder(h=head_h, r1=pin_r, r2=pin_r+head_h);\\n        }\\n\\n        // Simple grip rim on top of carrier (still below gears)\\n        translate([0,0,z_disc_top])\\n        difference() {\\n            cylinder(h=1.2, r=carrier_r);\\n            cylinder(h=1.2, r=carrier_r-1.0);\\n        }\\n    }\\n}\\n\\nmodule housing_shell() {\\n    rp_ring = m*z_ring/2;\\n\\n    add_int = m;\\n    ded_int = 1.25*m;\\n\\n    // Internal gear hole radii\\n    r_hole_max = rp_ring + ded_int; // largest radius in tooth roots\\n    r_outer = r_hole_max + wall;\\n\\n    // Use a cavity radius only slightly larger than tooth-root radius to avoid ledges\\n    r_cavity = r_hole_max + 0.15;\\n\\n    difference() {\\n        // Outer body\\n        union() {\\n            cylinder(h=bottom_thick, r=r_outer);\\n            translate([0,0,bottom_thick]) cylinder(h=z_total-bottom_thick, r=r_outer);\\n        }\\n\\n        // Lower smooth cavity (annulus; keep a solid region for the post)\\n        translate([0,0,bottom_thick])\\n        difference() {\\n            cylinder(h=z_gears-bottom_thick, r=r_cavity);\\n            cylinder(h=z_gears-bottom_thick, r=post_r+0.01);\\n        }\\n\\n        // Gear tooth region cavity (internal ring gear via gear-shaped hole)\\n        translate([0,0,z_gears])\\n        linear_extrude(height=gear_h)\\n            gear2d_external(\\n                teeth=z_ring,\\n                module_size=m,\\n                pa_deg=pressure_angle,\\n                // swapped add/ded to form internal gear hole\\n                addendum=ded_int,\\n                dedendum=add_int,\\n                backlash_mm=backlash+0.15\\n            );\\n\\n        // Upper cavity above gears up to start of lip (annulus; keep post)\\n        translate([0,0,z_gear_top])\\n        difference() {\\n            cylinder(h=z_lip_start-z_gear_top, r=r_cavity);\\n            cylinder(h=z_lip_start-z_gear_top, r=post_r+0.01);\\n        }\\n\\n        // Top constriction (45\u00b0-ish conical cavity to retain planets/carrier)\\n        translate([0,0,z_lip_start])\\n        difference() {\\n            cylinder(h=lip_h+0.01, r1=r_cavity, r2=r_cavity-lip_inset);\\n            cylinder(h=lip_h+0.01, r1=post_r+0.01, r2=post_r+0.01);\\n        }\\n\\n        // Anti-elephant-foot chamfer on inner bottom edge (kept away from carrier)\\n        translate([0,0,bottom_thick-0.01])\\n            cylinder(h=0.9, r1=r_cavity+0.8, r2=r_cavity);\\n    }\\n}\\n\\nmodule housing_post_and_cap() {\\n    // Fixed center post plus 45\u00b0 conical cap (captures sun+carrier).\\n    // The cap begins above the gears by clear_z.\\n    union() {\\n        cylinder(h=z_lip_start, r=post_r);\\n        translate([0,0,z_lip_start])\\n            cylinder(h=lip_h, r1=post_r, r2=post_r+lip_h);\\n    }\\n}\\n\\nmodule housing() {\\n    union() {\\n        housing_shell();\\n        housing_post_and_cap();\\n    }\\n}\\n\\n// ---------------------- Assembly ----------------------\\nmodule planetary_gearbox() {\\n    rp_s = m*z_sun/2;\\n    rp_p = m*z_planet/2;\\n    center_dist = rp_s + rp_p;\\n\\n    planet_pos = [ for (i=[0:planets-1]) [ center_dist*cos(i*360/planets), center_dist*sin(i*360/planets) ] ];\\n\\n    union() {\\n        housing();\\n        carrier();\\n        sun_gear();\\n        for (p=planet_pos) planet_gear(p);\\n    }\\n}\\n\\nplanetary_gearbox();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_6OwZc0iscbiahRLS97Y9e3Tj",
+    "content": "{\"success\": false, \"error\": \"\"}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_4MHfWnxgcSo5jfUbzwFqfLoI",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// Print-in-place single-stage planetary gearbox (PETG, 0.4 nozzle, 0.1mm layer)\\n// Axis vertical (Z-up). Designed for supportless printing (<=45\u00b0 overhangs).\\n// All moving parts are captive with built-in clearances.\\n// Units: mm\\n\\n$fn = 140;\\n\\n// ---------------------- Parameters ----------------------\\n// Gear set\\nm = 1.2;                    // module\\npressure_angle = 20;        // degrees\\nz_sun = 12;\\nz_planet = 12;\\nz_ring = z_sun + 2*z_planet; // planetary constraint\\nplanets = 3;\\n\\ngear_h = 8;\\n\\n// Print-in-place clearances (PETG)\\nclear_xy = 0.35;            // radial clearance for bearings/bores\\nclear_z  = 0.30;            // axial clearance between stacked parts\\nbacklash = 0.30;            // tooth backlash (mm) for free-running gears\\n\\n// Housing / carrier\\nbottom_thick  = 2.0;\\ncarrier_thick = 2.4;\\n\\n// Top retainers (self-supporting)\\nlip_h     = 2.6;            // vertical height of top constriction region\\nlip_inset = 2.6;            // radial inset (lip_inset ~= lip_h gives ~45\u00b0)\\n\\n// Shafts / pins\\npost_r = 3.0;               // fixed center post radius\\npin_r  = 2.2;               // planet pin shaft radius\\nhead_h = 2.0;               // pin head (cone) height => 45\u00b0 when dr=head_h\\n\\n// Wall thickness\\nwall = 3.0;\\n\\n// ---------------------- Helper math (radians) ----------------------\\nfunction deg(a) = a*180/PI;\\nfunction cosr(a) = cos(deg(a));\\nfunction sinr(a) = sin(deg(a));\\nfunction atanr(x) = atan(x)*PI/180;\\nfunction atan2r(y,x) = atan2(y,x)*PI/180;\\n\\nfunction rot2(p, a) = [ p[0]*cosr(a) - p[1]*sinr(a), p[0]*sinr(a) + p[1]*cosr(a) ];\\n\\nfunction involute_t(rb, r) = (r <= rb) ? 0 : sqrt((r*r)/(rb*rb) - 1);\\nfunction involute_theta(t) = t - atanr(t); // radians\\nfunction involute_xy(rb, r) = let(t=involute_t(rb,r), th=involute_theta(t)) [ r*cosr(th), r*sinr(th) ];\\n\\nfunction arc_points(r, a0, a1, n) = [\\n    for (i=[0:n])\\n        let(a = a0 + (a1-a0)*i/n)\\n        [ r*cosr(a), r*sinr(a) ]\\n];\\n\\n// ---------------------- Involute gear 2D (external) ----------------------\\n// A practical involute approximation suitable for FDM.\\nmodule gear2d_external(teeth, module_size, pa_deg=20,\\n                       addendum=undef, dedendum=undef,\\n                       backlash_mm=0.0,\\n                       inv_steps=10, arc_steps=7) {\\n    rp = module_size*teeth/2;\\n\\n    add = (addendum == undef) ? module_size : addendum;\\n    ded = (dedendum == undef) ? 1.25*module_size : dedendum;\\n\\n    rb = rp*cos(pa_deg);      // base radius\\n    ra = rp + add;            // outer radius\\n    rf = max(0.25, rp - ded); // root radius\\n\\n    // tooth thickness at pitch circle\\n    tooth_thickness = PI*module_size/2 - backlash_mm;\\n    half_ang = tooth_thickness/(2*rp); // radians\\n\\n    // involute polar angle at pitch\\n    tp = involute_t(rb, rp);\\n    thp = involute_theta(tp);\\n\\n    rot = half_ang - thp;     // radians\\n\\n    start_r = max(rb, rf);\\n\\n    base_pts = [\\n        for (i=[0:inv_steps])\\n            let(r = start_r + (ra-start_r)*i/inv_steps)\\n                involute_xy(rb, r)\\n    ];\\n\\n    right_pts = [ for (p=base_pts) rot2(p, +rot) ];\\n    left_pts  = [ for (p=base_pts) rot2([p[0], -p[1]], -rot) ];\\n\\n    a_root_r = +rot;\\n    a_root_l = -rot;\\n\\n    pr = right_pts[len(right_pts)-1];\\n    pl = left_pts[len(left_pts)-1];\\n    a_outer_r = atan2r(pr[1], pr[0]);\\n    a_outer_l = atan2r(pl[1], pl[0]);\\n\\n    tooth_poly = concat(\\n        // right root -> start\\n        (rf < start_r) ? [[ rf*cosr(a_root_r), rf*sinr(a_root_r) ], [ start_r*cosr(a_root_r), start_r*sinr(a_root_r) ]] : [[ rf*cosr(a_root_r), rf*sinr(a_root_r) ]],\\n        // right involute up\\n        right_pts,\\n        // outer arc\\n        arc_points(ra, a_outer_r, a_outer_l, arc_steps),\\n        // left involute down\\n        [ for (i=[len(left_pts)-1:-1:0]) left_pts[i] ],\\n        // left start -> root\\n        (rf < start_r) ? [[ start_r*cosr(a_root_l), start_r*sinr(a_root_l) ], [ rf*cosr(a_root_l), rf*sinr(a_root_l) ]] : [],\\n        // root arc\\n        arc_points(rf, a_root_l, a_root_r, arc_steps)\\n    );\\n\\n    union() {\\n        for (i=[0:teeth-1])\\n            rotate(i*360/teeth)\\n                polygon(points=tooth_poly);\\n        circle(r=rf);\\n    }\\n}\\n\\n// ---------------------- 3D gear ----------------------\\nmodule gear_external_3d(teeth, bore_r, z0, h,\\n                        module_size=m, pa_deg=pressure_angle,\\n                        backlash_mm=backlash) {\\n    translate([0,0,z0])\\n    difference() {\\n        linear_extrude(height=h)\\n            gear2d_external(teeth, module_size, pa_deg=pa_deg, backlash_mm=backlash_mm);\\n        translate([0,0,-0.25]) cylinder(h=h+0.5, r=bore_r);\\n    }\\n}\\n\\n// ---------------------- Assembly Z layout ----------------------\\nz_carrier   = bottom_thick + clear_z;\\nz_gears     = z_carrier + carrier_thick + clear_z;\\nz_gear_top  = z_gears + gear_h;\\nz_lip_start = z_gear_top + clear_z;\\nz_total     = z_lip_start + lip_h;\\n\\n// ---------------------- Parts ----------------------\\nmodule sun_gear() {\\n    gear_external_3d(z_sun, bore_r=post_r+clear_xy, z0=z_gears, h=gear_h);\\n}\\n\\nmodule planet_gear(pos) {\\n    translate([pos[0], pos[1], 0])\\n        gear_external_3d(z_planet, bore_r=pin_r+clear_xy, z0=z_gears, h=gear_h);\\n}\\n\\nmodule carrier() {\\n    rp_s = m*z_sun/2;\\n    rp_p = m*z_planet/2;\\n    center_dist = rp_s + rp_p;\\n\\n    rp_ring = m*z_ring/2;\\n    r_ring_tip = rp_ring - m; // approx internal ring tooth tip radius\\n\\n    carrier_r = r_ring_tip - 1.2;\\n\\n    z_disc = z_carrier;\\n    z_disc_top = z_disc + carrier_thick;\\n\\n    z_pin0 = z_disc_top;\\n    pin_shaft_h = (z_gear_top - z_pin0) + clear_z;\\n\\n    union() {\\n        // Disc (bearing hole around fixed post)\\n        translate([0,0,z_disc])\\n        difference() {\\n            cylinder(h=carrier_thick, r=carrier_r);\\n            translate([0,0,-0.25]) cylinder(h=carrier_thick+0.5, r=post_r+clear_xy);\\n        }\\n\\n        // Pins + 45\u00b0 conical heads (capture planets)\\n        for (i=[0:planets-1]) {\\n            ang = i*360/planets;\\n            x = center_dist*cos(ang);\\n            y = center_dist*sin(ang);\\n\\n            translate([x,y,z_pin0]) cylinder(h=pin_shaft_h, r=pin_r);\\n\\n            // head begins above planet top by clear_z\\n            translate([x,y,z_gear_top + clear_z])\\n                cylinder(h=head_h, r1=pin_r, r2=pin_r+head_h);\\n        }\\n\\n        // Grip rim on top of carrier (still below gears)\\n        translate([0,0,z_disc_top])\\n        difference() {\\n            cylinder(h=1.2, r=carrier_r);\\n            cylinder(h=1.2, r=carrier_r-1.0);\\n        }\\n    }\\n}\\n\\nmodule housing_shell() {\\n    rp_ring = m*z_ring/2;\\n\\n    add_int = m;\\n    ded_int = 1.25*m;\\n\\n    r_hole_max = rp_ring + ded_int; // largest radius in tooth roots\\n    r_outer = r_hole_max + wall;\\n\\n    // Cavity radius only slightly larger than tooth-root radius to avoid ledges\\n    r_cavity = r_hole_max + 0.15;\\n\\n    difference() {\\n        // Outer body\\n        union() {\\n            cylinder(h=bottom_thick, r=r_outer);\\n            translate([0,0,bottom_thick]) cylinder(h=z_total-bottom_thick, r=r_outer);\\n        }\\n\\n        // Lower smooth cavity (annulus; keep a solid region for the post)\\n        translate([0,0,bottom_thick])\\n        difference() {\\n            cylinder(h=z_gears-bottom_thick, r=r_cavity);\\n            cylinder(h=z_gears-bottom_thick, r=post_r+0.01);\\n        }\\n\\n        // Gear tooth region cavity (internal ring gear via gear-shaped hole)\\n        translate([0,0,z_gears])\\n        linear_extrude(height=gear_h)\\n            gear2d_external(\\n                teeth=z_ring,\\n                module_size=m,\\n                pa_deg=pressure_angle,\\n                // swapped add/ded to form internal gear hole\\n                addendum=ded_int,\\n                dedendum=add_int,\\n                backlash_mm=backlash+0.15\\n            );\\n\\n        // Upper cavity above gears up to start of lip (annulus; keep post)\\n        translate([0,0,z_gear_top])\\n        difference() {\\n            cylinder(h=z_lip_start-z_gear_top, r=r_cavity);\\n            cylinder(h=z_lip_start-z_gear_top, r=post_r+0.01);\\n        }\\n\\n        // Top constriction (conical cavity to retain planets/carrier)\\n        translate([0,0,z_lip_start])\\n        difference() {\\n            cylinder(h=lip_h+0.02, r1=r_cavity, r2=r_cavity-lip_inset);\\n            cylinder(h=lip_h+0.02, r=post_r+0.01);\\n        }\\n\\n        // Anti-elephant-foot chamfer on inner bottom edge\\n        translate([0,0,bottom_thick-0.01])\\n            cylinder(h=0.9, r1=r_cavity+0.8, r2=r_cavity);\\n    }\\n}\\n\\nmodule housing_post_and_cap() {\\n    // Fixed center post plus 45\u00b0 conical cap (captures sun+carrier).\\n    union() {\\n        cylinder(h=z_lip_start, r=post_r);\\n        translate([0,0,z_lip_start])\\n            cylinder(h=lip_h, r1=post_r, r2=post_r+lip_h);\\n    }\\n}\\n\\nmodule housing() {\\n    union() {\\n        housing_shell();\\n        housing_post_and_cap();\\n    }\\n}\\n\\n// ---------------------- Assembly ----------------------\\nmodule planetary_gearbox() {\\n    rp_s = m*z_sun/2;\\n    rp_p = m*z_planet/2;\\n    center_dist = rp_s + rp_p;\\n\\n    planet_pos = [ for (i=[0:planets-1]) [ center_dist*cos(i*360/planets), center_dist*sin(i*360/planets) ] ];\\n\\n    union() {\\n        housing();\\n        carrier();\\n        sun_gear();\\n        for (p=planet_pos) planet_gear(p);\\n    }\\n}\\n\\nplanetary_gearbox();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_4MHfWnxgcSo5jfUbzwFqfLoI",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_RlBpjxDjHvemYNecJwTQjbaG",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_RlBpjxDjHvemYNecJwTQjbaG",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_ItQJmMVjGEmgaYmi3XfynkER",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 340, 'azimuth': 35, 'elevation': 25}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_ItQJmMVjGEmgaYmi3XfynkER",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_lXtKeGFRM48MQA4KOjryMCHA",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 340, 'azimuth': 0, 'elevation': 85}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_lXtKeGFRM48MQA4KOjryMCHA",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_073O5lOvv5B9wAgnUMvECrtk",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// Print-in-place single-stage planetary gearbox (PETG, 0.4 nozzle, 0.1mm layer)\\n// Axis vertical (Z-up). Designed for supportless printing (<=45\u00b0 overhangs).\\n// All moving parts are captive with built-in clearances.\\n// Units: mm\\n\\n$fn = 140;\\n\\n// ---------------------- Parameters ----------------------\\n// Gear set\\nm = 1.2;                    // module\\npressure_angle = 20;        // degrees\\nz_sun = 12;\\nz_planet = 12;\\nz_ring = z_sun + 2*z_planet; // planetary constraint\\nplanets = 3;\\n\\ngear_h = 8;\\n\\n// Print-in-place clearances (PETG)\\nclear_xy = 0.35;            // radial clearance for bearings/bores\\nclear_z  = 0.30;            // axial clearance between stacked parts\\nbacklash = 0.30;            // tooth backlash (mm) for free-running gears\\n\\n// Housing / carrier\\nbottom_thick  = 2.0;\\ncarrier_thick = 2.4;\\n\\n// Top retainers (self-supporting)\\nlip_h     = 2.6;            // vertical height of top constriction region\\nlip_inset = 2.6;            // radial inset (lip_inset ~= lip_h gives ~45\u00b0)\\n\\n// Shafts / pins\\npost_r = 3.0;               // fixed center post radius\\npin_r  = 2.2;               // planet pin shaft radius\\nhead_h = 2.0;               // pin head (cone) height => 45\u00b0 when dr=head_h\\n\\n// Wall thickness\\nwall = 3.0;\\n\\n// ---------------------- Helper math (radians) ----------------------\\nfunction deg(a) = a*180/PI;\\nfunction cosr(a) = cos(deg(a));\\nfunction sinr(a) = sin(deg(a));\\nfunction atanr(x) = atan(x)*PI/180;\\nfunction atan2r(y,x) = atan2(y,x)*PI/180;\\n\\nfunction rot2(p, a) = [ p[0]*cosr(a) - p[1]*sinr(a), p[0]*sinr(a) + p[1]*cosr(a) ];\\n\\nfunction involute_t(rb, r) = (r <= rb) ? 0 : sqrt((r*r)/(rb*rb) - 1);\\nfunction involute_theta(t) = t - atanr(t); // radians\\nfunction involute_xy(rb, r) = let(t=involute_t(rb,r), th=involute_theta(t)) [ r*cosr(th), r*sinr(th) ];\\n\\nfunction arc_points(r, a0, a1, n) = [\\n    for (i=[0:n])\\n        let(a = a0 + (a1-a0)*i/n)\\n        [ r*cosr(a), r*sinr(a) ]\\n];\\n\\n// ---------------------- Involute gear 2D (external) ----------------------\\n// A practical involute approximation suitable for FDM.\\nmodule gear2d_external(teeth, module_size, pa_deg=20,\\n                       addendum=undef, dedendum=undef,\\n                       backlash_mm=0.0,\\n                       inv_steps=10, arc_steps=7) {\\n    rp = module_size*teeth/2;\\n\\n    add = (addendum == undef) ? module_size : addendum;\\n    ded = (dedendum == undef) ? 1.25*module_size : dedendum;\\n\\n    rb = rp*cos(pa_deg);      // base radius\\n    ra = rp + add;            // outer radius\\n    rf = max(0.25, rp - ded); // root radius\\n\\n    // tooth thickness at pitch circle\\n    tooth_thickness = PI*module_size/2 - backlash_mm;\\n    half_ang = tooth_thickness/(2*rp); // radians\\n\\n    // involute polar angle at pitch\\n    tp = involute_t(rb, rp);\\n    thp = involute_theta(tp);\\n\\n    rot = half_ang - thp;     // radians\\n\\n    start_r = max(rb, rf);\\n\\n    base_pts = [\\n        for (i=[0:inv_steps])\\n            let(r = start_r + (ra-start_r)*i/inv_steps)\\n                involute_xy(rb, r)\\n    ];\\n\\n    right_pts = [ for (p=base_pts) rot2(p, +rot) ];\\n    left_pts  = [ for (p=base_pts) rot2([p[0], -p[1]], -rot) ];\\n\\n    a_root_r = +rot;\\n    a_root_l = -rot;\\n\\n    pr = right_pts[len(right_pts)-1];\\n    pl = left_pts[len(left_pts)-1];\\n    a_outer_r = atan2r(pr[1], pr[0]);\\n    a_outer_l = atan2r(pl[1], pl[0]);\\n\\n    tooth_poly = concat(\\n        (rf < start_r) ? [[ rf*cosr(a_root_r), rf*sinr(a_root_r) ], [ start_r*cosr(a_root_r), start_r*sinr(a_root_r) ]] : [[ rf*cosr(a_root_r), rf*sinr(a_root_r) ]],\\n        right_pts,\\n        arc_points(ra, a_outer_r, a_outer_l, arc_steps),\\n        [ for (i=[len(left_pts)-1:-1:0]) left_pts[i] ],\\n        (rf < start_r) ? [[ start_r*cosr(a_root_l), start_r*sinr(a_root_l) ], [ rf*cosr(a_root_l), rf*sinr(a_root_l) ]] : [],\\n        arc_points(rf, a_root_l, a_root_r, arc_steps)\\n    );\\n\\n    union() {\\n        for (i=[0:teeth-1])\\n            rotate(i*360/teeth)\\n                polygon(points=tooth_poly);\\n        circle(r=rf);\\n    }\\n}\\n\\n// ---------------------- 3D gear ----------------------\\nmodule gear_external_3d(teeth, bore_r, z0, h,\\n                        module_size=m, pa_deg=pressure_angle,\\n                        backlash_mm=backlash) {\\n    translate([0,0,z0])\\n    difference() {\\n        linear_extrude(height=h)\\n            gear2d_external(teeth, module_size, pa_deg=pa_deg, backlash_mm=backlash_mm);\\n        translate([0,0,-0.25]) cylinder(h=h+0.5, r=bore_r);\\n    }\\n}\\n\\n// ---------------------- Assembly Z layout ----------------------\\nz_carrier   = bottom_thick + clear_z;\\nz_gears     = z_carrier + carrier_thick + clear_z;\\nz_gear_top  = z_gears + gear_h;\\nz_lip_start = z_gear_top + clear_z;\\nz_total     = z_lip_start + lip_h;\\n\\n// ---------------------- Parts ----------------------\\nmodule sun_gear() {\\n    gear_external_3d(z_sun, bore_r=post_r+clear_xy, z0=z_gears, h=gear_h);\\n}\\n\\nmodule planet_gear(pos) {\\n    translate([pos[0], pos[1], 0])\\n        gear_external_3d(z_planet, bore_r=pin_r+clear_xy, z0=z_gears, h=gear_h);\\n}\\n\\nmodule carrier() {\\n    rp_s = m*z_sun/2;\\n    rp_p = m*z_planet/2;\\n    center_dist = rp_s + rp_p;\\n\\n    rp_ring = m*z_ring/2;\\n    r_ring_tip = rp_ring - m; // approx internal ring tooth tip radius\\n\\n    carrier_r = r_ring_tip - 1.2;\\n\\n    z_disc = z_carrier;\\n    z_disc_top = z_disc + carrier_thick;\\n\\n    z_pin0 = z_disc_top;\\n    pin_shaft_h = (z_gear_top - z_pin0) + clear_z;\\n\\n    union() {\\n        // Disc (bearing hole around fixed post) with large cutouts to reduce friction/contact area.\\n        translate([0,0,z_disc])\\n        difference() {\\n            cylinder(h=carrier_thick, r=carrier_r);\\n\\n            // center bearing hole\\n            translate([0,0,-0.25]) cylinder(h=carrier_thick+0.5, r=post_r+clear_xy);\\n\\n            // 3 large cutouts between planet pins\\n            cut_r = carrier_r*0.28;\\n            cut_center_r = carrier_r*0.52;\\n            for (i=[0:planets-1]) {\\n                ang = (i*360/planets) + 60; // between pins\\n                translate([cut_center_r*cos(ang), cut_center_r*sin(ang), -0.25])\\n                    cylinder(h=carrier_thick+0.5, r=cut_r);\\n            }\\n        }\\n\\n        // Pins + 45\u00b0 conical heads (capture planets)\\n        for (i=[0:planets-1]) {\\n            ang = i*360/planets;\\n            x = center_dist*cos(ang);\\n            y = center_dist*sin(ang);\\n\\n            translate([x,y,z_pin0]) cylinder(h=pin_shaft_h, r=pin_r);\\n\\n            // head begins above planet top by clear_z\\n            translate([x,y,z_gear_top + clear_z])\\n                cylinder(h=head_h, r1=pin_r, r2=pin_r+head_h);\\n        }\\n\\n        // Grip rim on top of carrier (still below gears)\\n        translate([0,0,z_disc_top])\\n        difference() {\\n            cylinder(h=1.2, r=carrier_r);\\n            cylinder(h=1.2, r=carrier_r-1.0);\\n        }\\n    }\\n}\\n\\nmodule housing_shell() {\\n    rp_ring = m*z_ring/2;\\n\\n    add_int = m;\\n    ded_int = 1.25*m;\\n\\n    r_hole_max = rp_ring + ded_int; // largest radius in tooth roots\\n    r_outer = r_hole_max + wall;\\n\\n    // Cavity radius only slightly larger than tooth-root radius to avoid ledges\\n    r_cavity = r_hole_max + 0.15;\\n\\n    difference() {\\n        // Outer body\\n        union() {\\n            cylinder(h=bottom_thick, r=r_outer);\\n            translate([0,0,bottom_thick]) cylinder(h=z_total-bottom_thick, r=r_outer);\\n        }\\n\\n        // Lower smooth cavity (annulus; keep a solid region for the post)\\n        translate([0,0,bottom_thick])\\n        difference() {\\n            cylinder(h=z_gears-bottom_thick, r=r_cavity);\\n            cylinder(h=z_gears-bottom_thick, r=post_r+0.01);\\n        }\\n\\n        // Gear tooth region cavity (internal ring gear via gear-shaped hole)\\n        translate([0,0,z_gears])\\n        linear_extrude(height=gear_h)\\n            gear2d_external(\\n                teeth=z_ring,\\n                module_size=m,\\n                pa_deg=pressure_angle,\\n                // swapped add/ded to form internal gear hole\\n                addendum=ded_int,\\n                dedendum=add_int,\\n                backlash_mm=backlash+0.15\\n            );\\n\\n        // Upper cavity above gears up to start of lip (annulus; keep post)\\n        translate([0,0,z_gear_top])\\n        difference() {\\n            cylinder(h=z_lip_start-z_gear_top, r=r_cavity);\\n            cylinder(h=z_lip_start-z_gear_top, r=post_r+0.01);\\n        }\\n\\n        // Top constriction (conical cavity to retain planets/carrier)\\n        translate([0,0,z_lip_start])\\n        difference() {\\n            cylinder(h=lip_h+0.02, r1=r_cavity, r2=r_cavity-lip_inset);\\n            cylinder(h=lip_h+0.02, r=post_r+0.01);\\n        }\\n\\n        // Anti-elephant-foot chamfer on inner bottom edge\\n        translate([0,0,bottom_thick-0.01])\\n            cylinder(h=0.9, r1=r_cavity+0.8, r2=r_cavity);\\n    }\\n}\\n\\nmodule housing_post_and_cap() {\\n    // Fixed center post plus 45\u00b0 conical cap (captures sun+carrier).\\n    union() {\\n        cylinder(h=z_lip_start, r=post_r);\\n        translate([0,0,z_lip_start])\\n            cylinder(h=lip_h, r1=post_r, r2=post_r+lip_h);\\n    }\\n}\\n\\nmodule housing() {\\n    union() {\\n        housing_shell();\\n        housing_post_and_cap();\\n    }\\n}\\n\\n// ---------------------- Assembly ----------------------\\nmodule planetary_gearbox() {\\n    rp_s = m*z_sun/2;\\n    rp_p = m*z_planet/2;\\n    center_dist = rp_s + rp_p;\\n\\n    planet_pos = [ for (i=[0:planets-1]) [ center_dist*cos(i*360/planets), center_dist*sin(i*360/planets) ] ];\\n\\n    union() {\\n        housing();\\n        carrier();\\n        sun_gear();\\n        for (p=planet_pos) planet_gear(p);\\n    }\\n}\\n\\nplanetary_gearbox();\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_073O5lOvv5B9wAgnUMvECrtk",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_Ml3vjoDZshJRH39fEFbeeB1Q",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_Ml3vjoDZshJRH39fEFbeeB1Q",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_FiTmpCFjQ1oKO8xSutFIp6l5",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 340, 'azimuth': 35, 'elevation': 25}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_FiTmpCFjQ1oKO8xSutFIp6l5",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_sB3yjDsZ8adKxpsz7TQL4BPF",
+        "type": "function",
+        "function": {
+          "name": "submit",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_sB3yjDsZ8adKxpsz7TQL4BPF",
+    "content": "{\"success\": true, \"message\": \"Solution submitted\"}"
+  }
+]

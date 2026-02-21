@@ -1,0 +1,230 @@
+[
+  {
+    "role": "system",
+    "content": "You are an expert OpenSCAD programmer. Your task is to create a 3D model based on the\nuser's description.\n\nYou have access to the following tools:\n\n- write_scad(content): Write OpenSCAD code to the model file. Returns syntax errors if\n  any. Always provide the complete file contents\u2014this overwrites the previous version.\n\n- render_png(distance, azimuth, elevation): Render the current model from a specific\n  camera angle. Returns a PNG image.\n  - distance: Camera distance from origin (try 200-500 for typical models)\n  - azimuth: Horizontal angle in degrees (0=front, 90=right, 180=back, 270=left)\n  - elevation: Vertical angle in degrees (0=horizon, 90=top-down)\n\n- render_overview(): Render four standard views (front, back, top, isometric) as a\n  single composite image. Use this to quickly check your model from all angles.\n\n- submit(): Call this when you are satisfied with your model.\n\n## Guidelines\n\n1. Start by writing an initial version of the model, then render it to see the result.\n2. Iterate: refine the code, re-render, until satisfied.\n3. Use render_overview() periodically to verify the model looks correct from all angles.\n4. OpenSCAD uses millimeters as the default unit.\n5. When you believe the model meets the requirements, call submit().\n\nCommon OpenSCAD patterns:\n- Difference for subtracting shapes: difference() { base(); cutout(); }\n- Union for combining: union() { part1(); part2(); }\n- Linear extrude for 2D\u21923D: linear_extrude(height) square([x,y]);\n- Translate/rotate for positioning: translate([x,y,z]) rotate([rx,ry,rz]) shape();\n"
+  },
+  {
+    "role": "user",
+    "content": "Design a 3D printer torture test model. It should print as a single piece and\ninclude these features to test various aspects of 3D printer performance:\n\n * a grid of holes from 1-10mm\n * a grid of circular pins from 1-10mm, with 1-5mm of height\n * thin walls between 0.2-2mm\n * bridges of 5-50mm in length\n * overhang angles between 10-70 degrees\n\nThe model should be reasonably compact to facilitate quick printing. Use judgement\nto figure out how many of each feature to include, and how to arrange them in a way\nthat allows for easy measurement and evaluation after printing."
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_hDqaaHFJ091ucxyp1RJlB77E",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// 3D Printer Torture Test Model\\n// Single-piece compact calibration/torture test\\n// Units: mm\\n\\n$fn = 72;\\n\\n// ---------- Parameters ----------\\nbase_size = [160, 100];\\nbase_t = 4;\\nbase_corner_r = 6;\\n\\nlabels_on = true;\\nlabel_h = 0.8;\\nlabel_z = base_t + 0.2;\\n\\n// ---------- Helpers ----------\\nmodule rounded_plate(size=[100,80], t=4, r=4){\\n    linear_extrude(height=t)\\n        offset(r=r)\\n            square([size[0]-2*r, size[1]-2*r], center=true);\\n}\\n\\nmodule label3d(s, pos=[0,0,0], size=4, rot=0){\\n    if(labels_on)\\n        translate(pos)\\n            rotate([0,0,rot])\\n                linear_extrude(height=label_h)\\n                    text(s, size=size, font=\"Liberation Sans:style=Bold\", halign=\"center\", valign=\"center\");\\n}\\n\\n// ---------- Features ----------\\nmodule hole_grid(origin=[-50, 15], pitch=[12, 14]){\\n    // 10 holes: diameters 1..10\\n    for(r=[0:1])\\n        for(c=[0:4]){\\n            d = r*5 + c + 1;\\n            x = origin[0] + c*pitch[0];\\n            y = origin[1] + r*pitch[1];\\n            // Through-hole\\n            translate([x,y,-1]) cylinder(d=d, h=base_t+2);\\n        }\\n}\\n\\nmodule pin_grid(origin=[-50, -22], pitch=[12, 14]){\\n    // 10 pins: diameters 1..10, heights 1..5mm repeating\\n    for(r=[0:1])\\n        for(c=[0:4]){\\n            d = r*5 + c + 1;\\n            h = (d-1)%5 + 1;\\n            x = origin[0] + c*pitch[0];\\n            y = origin[1] + r*pitch[1];\\n            translate([x,y,base_t]) cylinder(d=d, h=h);\\n        }\\n}\\n\\nmodule thin_walls(origin=[30, -5]){\\n    // walls thicknesses from 0.2..2mm\\n    // (0.2mm is intentionally extreme)\\n    ts = [0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0];\\n    wall_len = 34;\\n    wall_h = 22;\\n    gap = 3.2;\\n\\n    x0 = origin[0];\\n    y0 = origin[1];\\n\\n    for(i=[0:len(ts)-1]){\\n        t = ts[i];\\n        x = x0 + i*gap;\\n        translate([x, y0, base_t])\\n            cube([t, wall_len, wall_h]);\\n    }\\n}\\n\\nmodule bridge_ladder(origin=[0, -43]){\\n    // Compact bridge test: a single roof spanning multiple gaps\\n    // Gaps (bridge lengths) include 5mm and up to 50mm.\\n    gaps = [5, 10, 20, 30, 50];\\n\\n    support_t = 3;\\n    depth = 18;\\n    h = 14;\\n    roof_t = 1.2;\\n\\n    // Build supports at x positions that create the requested gaps\\n    x = origin[0];\\n    y = origin[1];\\n\\n    // supports are vertical walls; roof bridges between them\\n    // Place N+1 supports for N gaps\\n    xs = [0];\\n    for(i=[0:len(gaps)-1]){\\n        xs = concat(xs, [xs[len(xs)-1] + support_t + gaps[i]]);\\n    }\\n\\n    // Supports\\n    for(i=[0:len(xs)-1]){\\n        translate([x + xs[i], y, base_t])\\n            cube([support_t, depth, h]);\\n    }\\n\\n    // Roof spanning across all supports (bridges happen between supports)\\n    total_len = xs[len(xs)-1] + support_t;\\n    translate([x, y, base_t + h])\\n        cube([total_len, depth, roof_t]);\\n}\\n\\nmodule overhang_row(origin=[-70, 35]){\\n    angles = [10,20,30,40,50,60,70];\\n    depth = 12;\\n    pillar_w = 6;\\n    H = 15;\\n    clearance = 0.6;\\n\\n    spacing = 4;\\n\\n    x = origin[0];\\n    y = origin[1];\\n\\n    for(i=[0:len(angles)-1]){\\n        a = angles[i];\\n        L = (H - clearance) * tan(a);\\n\\n        // pillar\\n        translate([x, y, base_t]) cube([pillar_w, depth, H]);\\n\\n        // overhang wedge: triangular prism attached to pillar face\\n        translate([x + pillar_w, y, base_t])\\n            polyhedron(\\n                points=[\\n                    [0,0,clearance],   // 0\\n                    [0,0,H],           // 1\\n                    [L,0,clearance],   // 2\\n                    [0,depth,clearance], // 3\\n                    [0,depth,H],       // 4\\n                    [L,depth,clearance] // 5\\n                ],\\n                faces=[\\n                    [0,2,1],\\n                    [3,4,5],\\n                    [0,1,4,3],\\n                    [0,3,5,2],\\n                    [1,2,5,4]\\n                ]\\n            );\\n\\n        // small pad under free end to help measure droop without merging to base\\n        // (kept low and offset so the overhang remains unsupported)\\n        translate([x + pillar_w + L - 2, y + depth + 2, base_t])\\n            cube([4, 4, 0.6]);\\n\\n        // advance x\\n        x = x + pillar_w + L + spacing;\\n    }\\n}\\n\\nmodule group_labels(){\\n    label3d(\"HOLES \u00d81-10\", pos=[-45, 34, label_z], size=5);\\n    label3d(\"PINS \u00d81-10\",  pos=[-45, -34, label_z], size=5);\\n\\n    label3d(\"THIN WALLS 0.2-2.0\", pos=[55, 30, label_z], size=5);\\n    label3d(\"BRIDGES 5-50\", pos=[0, -49, label_z], size=5);\\n    label3d(\"OVERHANG 10-70\u00b0\", pos=[30, 49, label_z], size=5);\\n}\\n\\n// ---------- Assemble ----------\\n\\ndifference(){\\n    union(){\\n        rounded_plate(size=base_size, t=base_t, r=base_corner_r);\\n\\n        // Additive features\\n        pin_grid();\\n        thin_walls();\\n        bridge_ladder();\\n        overhang_row();\\n        group_labels();\\n    }\\n\\n    // Subtractive features\\n    hole_grid();\\n}\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_hDqaaHFJ091ucxyp1RJlB77E",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_0IpG8rdIhGzaA6VtTwPODADW",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_0IpG8rdIhGzaA6VtTwPODADW",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_TIkl8PmPkfzpyLoro7qBUxei",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 320, 'azimuth': 35, 'elevation': 25}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_TIkl8PmPkfzpyLoro7qBUxei",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_ZiHLRdIZ8sId7ViNAnvSC8zH",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// 3D Printer Torture Test Model\\n// Single-piece compact calibration/torture test\\n// Units: mm\\n\\n$fn = 72;\\n\\n// ---------- Parameters ----------\\nbase_size = [160, 100];\\nbase_t = 4;\\nbase_corner_r = 6;\\n\\nlabels_on = true;\\nlabel_h = 0.8;\\nlabel_z = base_t + 0.2;\\n\\n// ---------- Helpers ----------\\nmodule rounded_plate(size=[100,80], t=4, r=4){\\n    linear_extrude(height=t)\\n        offset(r=r)\\n            square([size[0]-2*r, size[1]-2*r], center=true);\\n}\\n\\nmodule label3d(s, pos=[0,0,0], size=4, rot=0){\\n    if(labels_on)\\n        translate(pos)\\n            rotate([0,0,rot])\\n                linear_extrude(height=label_h)\\n                    text(s, size=size, font=\"Liberation Sans:style=Bold\", halign=\"center\", valign=\"center\");\\n}\\n\\n// ---------- Features ----------\\nmodule hole_grid(origin=[-50, 15], pitch=[12, 14]){\\n    // 10 holes: diameters 1..10\\n    for(r=[0:1])\\n        for(c=[0:4]){\\n            d = r*5 + c + 1;\\n            x = origin[0] + c*pitch[0];\\n            y = origin[1] + r*pitch[1];\\n            translate([x,y,-1]) cylinder(d=d, h=base_t+2);\\n        }\\n}\\n\\nmodule pin_grid(origin=[-50, -22], pitch=[12, 14]){\\n    // 10 pins: diameters 1..10, heights 1..5mm repeating\\n    for(r=[0:1])\\n        for(c=[0:4]){\\n            d = r*5 + c + 1;\\n            h = (d-1)%5 + 1;\\n            x = origin[0] + c*pitch[0];\\n            y = origin[1] + r*pitch[1];\\n            translate([x,y,base_t]) cylinder(d=d, h=h);\\n        }\\n}\\n\\nmodule thin_walls(origin=[30, -5]){\\n    // walls thicknesses from 0.2..2mm\\n    ts = [0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0];\\n    wall_len = 34;\\n    wall_h = 22;\\n    gap = 3.2;\\n\\n    x0 = origin[0];\\n    y0 = origin[1];\\n\\n    for(i=[0:len(ts)-1]){\\n        t = ts[i];\\n        x = x0 + i*gap;\\n        translate([x, y0, base_t])\\n            cube([t, wall_len, wall_h]);\\n    }\\n}\\n\\nmodule bridge_ladder(origin=[-66.5, -43]){\\n    // Compact bridge test: a single roof spanning multiple gaps.\\n    // Gap lengths include 5mm and up to 50mm.\\n    gaps = [5, 10, 20, 30, 50];\\n\\n    support_t = 3;\\n    depth = 18;\\n    h = 14;\\n    roof_t = 1.2;\\n\\n    x0 = origin[0];\\n    y0 = origin[1];\\n\\n    // N gaps => N+1 supports\\n    xs = [0];\\n    for(i=[0:len(gaps)-1])\\n        xs = concat(xs, [xs[len(xs)-1] + support_t + gaps[i]]);\\n\\n    for(i=[0:len(xs)-1])\\n        translate([x0 + xs[i], y0, base_t])\\n            cube([support_t, depth, h]);\\n\\n    total_len = xs[len(xs)-1] + support_t;\\n    translate([x0, y0, base_t + h])\\n        cube([total_len, depth, roof_t]);\\n}\\n\\nmodule overhang_row(origin=[-70, 35]){\\n    // Overhang angles measured from vertical: 10..70 deg\\n    angles = [10,20,30,40,50,60,70];\\n\\n    depth = 10;\\n    pillar_w = 4;\\n    H = 12;\\n    clearance = 0.6;\\n    spacing = 2;\\n\\n    x = origin[0];\\n    y = origin[1];\\n\\n    for(i=[0:len(angles)-1]){\\n        a = angles[i];\\n        L = (H - clearance) * tan(a);\\n\\n        translate([x, y, base_t]) cube([pillar_w, depth, H]);\\n\\n        // triangular prism wedge (underside is the angled overhang surface)\\n        translate([x + pillar_w, y, base_t])\\n            polyhedron(\\n                points=[\\n                    [0,0,clearance],\\n                    [0,0,H],\\n                    [L,0,clearance],\\n                    [0,depth,clearance],\\n                    [0,depth,H],\\n                    [L,depth,clearance]\\n                ],\\n                faces=[\\n                    [0,2,1],\\n                    [3,4,5],\\n                    [0,1,4,3],\\n                    [0,3,5,2],\\n                    [1,2,5,4]\\n                ]\\n            );\\n\\n        x = x + pillar_w + L + spacing;\\n    }\\n}\\n\\nmodule group_labels(){\\n    label3d(\"HOLES \\\\u00d81-10\", pos=[-45, 34, label_z], size=5);\\n    label3d(\"PINS \\\\u00d81-10\",  pos=[-45, -34, label_z], size=5);\\n\\n    label3d(\"THIN WALLS 0.2-2.0\", pos=[55, 33, label_z], size=5);\\n    label3d(\"BRIDGES 5-50\", pos=[0, -49, label_z], size=5);\\n    label3d(\"OVERHANG 10-70\\\\u00b0\", pos=[30, 46, label_z], size=5);\\n}\\n\\n// ---------- Assemble ----------\\n\\ndifference(){\\n    union(){\\n        rounded_plate(size=base_size, t=base_t, r=base_corner_r);\\n\\n        // Additive features\\n        pin_grid();\\n        thin_walls();\\n        bridge_ladder();\\n        overhang_row();\\n        group_labels();\\n    }\\n\\n    // Subtractive features\\n    hole_grid();\\n}\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_ZiHLRdIZ8sId7ViNAnvSC8zH",
+    "content": "{\"success\": false, \"error\": \"\"}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_BABLWLiDzCeeoA9LyCCSKkZA",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// 3D Printer Torture Test Model\\n// Single-piece compact calibration/torture test\\n// Units: mm\\n\\n$fn = 72;\\n\\n// ---------- Parameters ----------\\nbase_size = [160, 100];\\nbase_t = 4;\\nbase_corner_r = 6;\\n\\nlabels_on = true;\\nlabel_h = 0.8;\\nlabel_z = base_t + 0.2;\\n\\n// ---------- Helpers ----------\\nmodule rounded_plate(size=[100,80], t=4, r=4){\\n    linear_extrude(height=t)\\n        offset(r=r)\\n            square([size[0]-2*r, size[1]-2*r], center=true);\\n}\\n\\nmodule label3d(s, pos=[0,0,0], size=4, rot=0){\\n    if(labels_on)\\n        translate(pos)\\n            rotate([0,0,rot])\\n                linear_extrude(height=label_h)\\n                    text(s, size=size, font=\"Liberation Sans:style=Bold\", halign=\"center\", valign=\"center\");\\n}\\n\\n// ---------- Features ----------\\nmodule hole_grid(origin=[-50, 15], pitch=[12, 14]){\\n    // 10 holes: diameters 1..10\\n    for(r=[0:1])\\n        for(c=[0:4]){\\n            d = r*5 + c + 1;\\n            x = origin[0] + c*pitch[0];\\n            y = origin[1] + r*pitch[1];\\n            translate([x,y,-1]) cylinder(d=d, h=base_t+2);\\n        }\\n}\\n\\nmodule pin_grid(origin=[-50, -22], pitch=[12, 14]){\\n    // 10 pins: diameters 1..10, heights 1..5mm repeating\\n    for(r=[0:1])\\n        for(c=[0:4]){\\n            d = r*5 + c + 1;\\n            h = (d-1)%5 + 1;\\n            x = origin[0] + c*pitch[0];\\n            y = origin[1] + r*pitch[1];\\n            translate([x,y,base_t]) cylinder(d=d, h=h);\\n        }\\n}\\n\\nmodule thin_walls(origin=[30, -5]){\\n    // walls thicknesses from 0.2..2mm\\n    ts = [0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0];\\n    wall_len = 34;\\n    wall_h = 22;\\n    gap = 3.2;\\n\\n    x0 = origin[0];\\n    y0 = origin[1];\\n\\n    for(i=[0:len(ts)-1]){\\n        t = ts[i];\\n        x = x0 + i*gap;\\n        translate([x, y0, base_t])\\n            cube([t, wall_len, wall_h]);\\n    }\\n}\\n\\nmodule bridge_ladder(origin=[-66.5, -43]){\\n    // Compact bridge test: a single roof spanning multiple gaps.\\n    // Gap lengths include 5mm and up to 50mm.\\n    gaps = [5, 10, 20, 30, 50];\\n\\n    support_t = 3;\\n    depth = 18;\\n    h = 14;\\n    roof_t = 1.2;\\n\\n    x0 = origin[0];\\n    y0 = origin[1];\\n\\n    // N gaps => N+1 supports\\n    xs = [0];\\n    for(i=[0:len(gaps)-1])\\n        xs = concat(xs, [xs[len(xs)-1] + support_t + gaps[i]]);\\n\\n    for(i=[0:len(xs)-1])\\n        translate([x0 + xs[i], y0, base_t])\\n            cube([support_t, depth, h]);\\n\\n    total_len = xs[len(xs)-1] + support_t;\\n    translate([x0, y0, base_t + h])\\n        cube([total_len, depth, roof_t]);\\n}\\n\\nmodule overhang_row(origin=[-70, 35]){\\n    // Overhang angles measured from vertical: 10..70 deg\\n    angles = [10,20,30,40,50,60,70];\\n\\n    depth = 10;\\n    pillar_w = 4;\\n    H = 12;\\n    clearance = 0.6;\\n    spacing = 2;\\n\\n    x = origin[0];\\n    y = origin[1];\\n\\n    for(i=[0:len(angles)-1]){\\n        a = angles[i];\\n        L = (H - clearance) * tan(a);\\n\\n        translate([x, y, base_t]) cube([pillar_w, depth, H]);\\n\\n        // triangular prism wedge (underside is the angled overhang surface)\\n        translate([x + pillar_w, y, base_t])\\n            polyhedron(\\n                points=[\\n                    [0,0,clearance],\\n                    [0,0,H],\\n                    [L,0,clearance],\\n                    [0,depth,clearance],\\n                    [0,depth,H],\\n                    [L,depth,clearance]\\n                ],\\n                faces=[\\n                    [0,2,1],\\n                    [3,4,5],\\n                    [0,1,4,3],\\n                    [0,3,5,2],\\n                    [1,2,5,4]\\n                ]\\n            );\\n\\n        x = x + pillar_w + L + spacing;\\n    }\\n}\\n\\nmodule group_labels(){\\n    label3d(\"HOLES D1-10\", pos=[-45, 34, label_z], size=5);\\n    label3d(\"PINS D1-10\",  pos=[-45, -34, label_z], size=5);\\n\\n    label3d(\"THIN WALLS 0.2-2.0\", pos=[55, 33, label_z], size=5);\\n    label3d(\"BRIDGES 5-50\", pos=[0, -49, label_z], size=5);\\n    label3d(\"OVERHANG 10-70 deg\", pos=[30, 46, label_z], size=5);\\n}\\n\\n// ---------- Assemble ----------\\n\\ndifference(){\\n    union(){\\n        rounded_plate(size=base_size, t=base_t, r=base_corner_r);\\n\\n        // Additive features\\n        pin_grid();\\n        thin_walls();\\n        bridge_ladder();\\n        overhang_row();\\n        group_labels();\\n    }\\n\\n    // Subtractive features\\n    hole_grid();\\n}\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_BABLWLiDzCeeoA9LyCCSKkZA",
+    "content": "{\"success\": false, \"error\": \"\"}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_d4unmqYajrMUiKKtMWdh0Ze0",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_d4unmqYajrMUiKKtMWdh0Ze0",
+    "content": "{\"success\": false, \"error\": \"ERROR: Parser error: syntax error in file ../../../../tmp/tmpwoxeogsb/model.scad, line 89\nCan't parse file '/tmp/tmpwoxeogsb/model.scad'!\"}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_vnrFPEXgZ2TD2UIdAqet6jtZ",
+        "type": "function",
+        "function": {
+          "name": "write_scad",
+          "arguments": "{'content': '// 3D Printer Torture Test Model\\n// Single-piece compact calibration/torture test\\n// Units: mm\\n\\n$fn = 72;\\n\\n// ---------- Parameters ----------\\nbase_size = [160, 100];\\nbase_t = 4;\\nbase_corner_r = 6;\\n\\nlabels_on = true;\\nlabel_h = 0.8;\\nlabel_z = base_t + 0.2;\\n\\n// ---------- Helpers ----------\\nmodule rounded_plate(size=[100,80], t=4, r=4){\\n    linear_extrude(height=t)\\n        offset(r=r)\\n            square([size[0]-2*r, size[1]-2*r], center=true);\\n}\\n\\nmodule label3d(s, pos=[0,0,0], size=4, rot=0){\\n    if(labels_on)\\n        translate(pos)\\n            rotate([0,0,rot])\\n                linear_extrude(height=label_h)\\n                    text(s, size=size, font=\"Liberation Sans:style=Bold\", halign=\"center\", valign=\"center\");\\n}\\n\\nfunction sum_upto(v, i) = (i < 0) ? 0 : v[i] + sum_upto(v, i-1);\\n\\n// ---------- Features ----------\\nmodule hole_grid(origin=[-50, 15], pitch=[12, 14]){\\n    // 10 holes: diameters 1..10\\n    for(r=[0:1])\\n        for(c=[0:4]){\\n            d = r*5 + c + 1;\\n            x = origin[0] + c*pitch[0];\\n            y = origin[1] + r*pitch[1];\\n            translate([x,y,-1]) cylinder(d=d, h=base_t+2);\\n        }\\n}\\n\\nmodule pin_grid(origin=[-50, -22], pitch=[12, 14]){\\n    // 10 pins: diameters 1..10, heights 1..5mm repeating\\n    for(r=[0:1])\\n        for(c=[0:4]){\\n            d = r*5 + c + 1;\\n            h = (d-1)%5 + 1;\\n            x = origin[0] + c*pitch[0];\\n            y = origin[1] + r*pitch[1];\\n            translate([x,y,base_t]) cylinder(d=d, h=h);\\n        }\\n}\\n\\nmodule thin_walls(origin=[30, -5]){\\n    // walls thicknesses from 0.2..2mm\\n    ts = [0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0];\\n    wall_len = 34;\\n    wall_h = 22;\\n    gap = 3.2;\\n\\n    x0 = origin[0];\\n    y0 = origin[1];\\n\\n    for(i=[0:len(ts)-1]){\\n        t = ts[i];\\n        translate([x0 + i*gap, y0, base_t])\\n            cube([t, wall_len, wall_h]);\\n    }\\n}\\n\\nmodule bridge_ladder(y0=-43){\\n    // Compact bridge test: a single roof spanning multiple gaps.\\n    // Gap lengths include 5mm and up to 50mm.\\n    gaps = [5, 10, 20, 30, 50];\\n\\n    support_t = 3;\\n    depth = 18;\\n    h = 14;\\n    roof_t = 1.2;\\n\\n    n = len(gaps);\\n    support_count = n + 1;\\n\\n    total_len = support_count*support_t + sum_upto(gaps, n-1);\\n    x0 = -total_len/2;\\n\\n    for(i=[0:support_count-1]){\\n        xi = x0 + i*support_t + sum_upto(gaps, i-1);\\n        translate([xi, y0, base_t]) cube([support_t, depth, h]);\\n    }\\n\\n    translate([x0, y0, base_t + h]) cube([total_len, depth, roof_t]);\\n}\\n\\nmodule overhang_row(y0=35){\\n    // Overhang angles measured from vertical: 10..70 deg\\n    angles = [10,20,30,40,50,60,70];\\n\\n    depth = 10;\\n    pillar_w = 4;\\n    H = 12;\\n    clearance = 0.6;\\n    spacing = 2;\\n\\n    Ls = [ for(a=angles) (H - clearance) * tan(a) ];\\n    widths = [ for(i=[0:len(angles)-1]) pillar_w + Ls[i] + spacing ];\\n    total_w = sum_upto(widths, len(widths)-1) - spacing; // remove last trailing spacing\\n    x_start = -total_w/2;\\n\\n    for(i=[0:len(angles)-1]){\\n        xi = x_start + sum_upto(widths, i-1);\\n        L = Ls[i];\\n\\n        translate([xi, y0, base_t]) cube([pillar_w, depth, H]);\\n\\n        // triangular prism wedge; angled face is the overhang surface\\n        translate([xi + pillar_w, y0, base_t])\\n            polyhedron(\\n                points=[\\n                    [0,0,clearance],\\n                    [0,0,H],\\n                    [L,0,clearance],\\n                    [0,depth,clearance],\\n                    [0,depth,H],\\n                    [L,depth,clearance]\\n                ],\\n                faces=[\\n                    [0,2,1],\\n                    [3,4,5],\\n                    [0,1,4,3],\\n                    [0,3,5,2],\\n                    [1,2,5,4]\\n                ]\\n            );\\n    }\\n}\\n\\nmodule group_labels(){\\n    label3d(\"HOLES D1-10\", pos=[-45, 34, label_z], size=5);\\n    label3d(\"PINS D1-10\",  pos=[-45, -34, label_z], size=5);\\n\\n    label3d(\"THIN WALLS 0.2-2.0\", pos=[55, 33, label_z], size=5);\\n    label3d(\"BRIDGES 5-50\", pos=[0, -49, label_z], size=5);\\n    label3d(\"OVERHANG 10-70 deg\", pos=[30, 46, label_z], size=5);\\n}\\n\\n// ---------- Assemble ----------\\n\\ndifference(){\\n    union(){\\n        rounded_plate(size=base_size, t=base_t, r=base_corner_r);\\n\\n        // Additive features\\n        pin_grid();\\n        thin_walls();\\n        bridge_ladder();\\n        overhang_row();\\n        group_labels();\\n    }\\n\\n    // Subtractive features\\n    hole_grid();\\n}\\n'}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_vnrFPEXgZ2TD2UIdAqet6jtZ",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_1RwzwXID4p70iNKNnI9zTWr8",
+        "type": "function",
+        "function": {
+          "name": "render_overview",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_1RwzwXID4p70iNKNnI9zTWr8",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_mYFXaZSoKqJLYyeY4bDOL0i4",
+        "type": "function",
+        "function": {
+          "name": "render_png",
+          "arguments": "{'distance': 330, 'azimuth': 35, 'elevation': 25}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_mYFXaZSoKqJLYyeY4bDOL0i4",
+    "content": "{\"success\": true}"
+  },
+  {
+    "role": "assistant",
+    "content": ""
+  },
+  {
+    "role": "assistant",
+    "tool_calls": [
+      {
+        "id": "call_hGvwNmxT8KsqdU4I4jr6K2Iw",
+        "type": "function",
+        "function": {
+          "name": "submit",
+          "arguments": "{}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_hGvwNmxT8KsqdU4I4jr6K2Iw",
+    "content": "{\"success\": true, \"message\": \"Solution submitted\"}"
+  }
+]

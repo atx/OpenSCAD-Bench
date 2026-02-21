@@ -448,6 +448,7 @@ EXECUTORS: list[BaseExecutor] = [
     AgentExecutor("openrouter/openai/gpt-5.1-codex-max"),
     AgentExecutor("openrouter/openai/gpt-5.1-codex-mini"),
     AgentExecutor("openrouter/openai/gpt-5.2-codex"),
+    AgentExecutor("openrouter/openai/gpt-5.2"),
 ]
 
 
